@@ -1,0 +1,10 @@
+# Нормалізуємо кінці рядків у репозиторії, щоб діфи не рябіли CRLF↔LF.
+* text=auto eol=lf
+
+# Скрипти лишаємо у звичному для Windows CRLF. BOM у них — частина вмісту:
+# без нього Windows PowerShell 5.1 читає кирилицю як абракадабру.
+*.ps1 text eol=crlf
+
+*.png binary
+*.mp4 binary
+*.wav binary

@@ -1,0 +1,80 @@
+[project]
+name = "videoworks"
+version = "0.1.0"
+description = "Агентна обробка відео: транскрибація, монтаж, субтитри, переклад"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "typer>=0.15",
+    "rich>=13.9",
+    "pydantic>=2.10",
+    "faster-whisper>=1.1",
+    "pysubs2>=1.7",
+    "scenedetect>=0.7",
+    "numpy>=2.1",
+    # CTranslate2 на Windows не тягне CUDA-рантайм сам:
+    # без цих двох faster-whisper падає з "Could not locate cudnn_ops64_9.dll"
+    "nvidia-cublas-cu12>=12.4",
+    "nvidia-cudnn-cu12>=9.1",
+]
+
+[project.optional-dependencies]
+# Важкі бекенди — лише тим, хто їх міряє.
+# torch і torchaudio названі явно, хоча приходять і транзитивно:
+# tool.uv.sources діє лише на прямі залежності, і без цього обидва
+# бекенди тихо отримували збірку без CUDA.
+# Версія зафіксована, і це release candidate — свідомо.
+#   • до 3.8.6 whisperx пінить ctranslate2<4.5, і встановлення відкочувало його
+#     до 4.4.0. Той хоче cuDNN 8, тоді як torch тягне cuDNN 9, і на GPU ламався
+#     основний бекенд — faster-whisper;
+#   • стабільна 3.8.6 пінить huggingface-hub<1.0, а MOSS вимагає
+#     transformers>=5.6, який хоче huggingface-hub>=1.5. Тобто 3.8.6 і MOSS
+#     не уживаються в одному оточенні взагалі;
+#   • у 3.8.7rc1 цей пін послаблено, і обидва бекенди стають сумісними.
+# Щойно вийде стабільна 3.8.7 — замінити.
+whisperx = ["whisperx==3.8.7rc1", "torch>=2.8", "torchaudio>=2.8"]
+# MOSS немає на PyPI: пакет ставиться з репозиторію. Без нього
+# встановлений transformers сам собою нічого не дає.
+moss = [
+    "moss-transcribe-diarize[torch-runtime] @ git+https://github.com/OpenMOSS/MOSS-Transcribe-Diarize@main",
+    "torch>=2.8",
+    "torchaudio>=2.8",
+]
+
+# torch із PyPI під Windows — збірка без CUDA (`2.14.0+cpu`), і вирівнювання
+# whisperX разом із MOSS поїхали б на процесор. GPU-колеса лежать окремо.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
+torchaudio = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
+
+[project.scripts]
+videoworks = "videoworks.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/videoworks"]
+
+# Потрібно, щоб extra `moss` міг посилатись прямо на git: пакета немає на PyPI.
+# Для публікації на PyPI таке посилання довелося б прибрати.
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

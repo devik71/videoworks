@@ -1,0 +1,191 @@
+# Каталог зовнішніх репозиторіїв для проєкту агентної обробки відео.
+# tier: core   - беремо як фундамент / вивчаємо код глибоко
+#       study  - читаємо як референс архітектури, код у продукт не тягнемо
+#       tool   - готова утиліта в пайплайн (CLI/бібліотека)
+#       watch  - тримаємо в полі зору: ще не готове або ліцензія обмежує
+
+groups:
+
+  agent_editing:
+    title: Агентне редагування відео
+    repos:
+      - name: video-use
+        url: https://github.com/browser-use/video-use
+        stars: 24200
+        license: MIT
+        tier: core
+        why: >
+          Найближчий аналог того, що будуємо. Text-first: LLM не дивиться відео,
+          а читає word-level транскрипт (~12KB на проєкт) плюс вибіркові PNG-фільмстріпи.
+          Реєструється як skill для Claude Code. Python + FFmpeg + ElevenLabs Scribe.
+          Патерн "інвентаризація -> план монтажу -> апрув -> рендер" беремо як основу.
+
+      - name: OpenMontage
+        url: https://github.com/calesthio/OpenMontage
+        stars: 56400
+        license: AGPL-3.0
+        tier: study
+        why: >
+          12 продакшн-пайплайнів, 100+ тулів, 700+ skill-файлів. Найкраще джерело того,
+          ЯК описувати агенту знання про домен: YAML-маніфести + Markdown skills,
+          Python лише для персистенції. УВАГА AGPLv3 - код не копіюємо в закритий
+          продукт, беремо ідеї структури.
+
+      - name: VideoAgent
+        url: https://github.com/HKUDS/VideoAgent
+        stars: 1800
+        license: MIT
+        tier: study
+        why: >
+          EMNLP 2026. Академічна база: intent analysis (явні та неявні під-інтенти),
+          graph-powered планування тулів зі зворотними звязками, мультимодальне
+          розуміння. Джерело ідей для нашого планувальника.
+
+      - name: buttercut
+        url: https://github.com/barefootford/buttercut
+        stars: 592
+        license: PolyForm Noncommercial 1.0.0 (+ commercial output exception)
+        tier: watch
+        why: >
+          Claude як монтажер, віддає FCPXML для Final Cut / Premiere / Resolve.
+          Ruby + Python + FFmpeg + WhisperX, орієнтований на Apple Silicon.
+          Цінний патерн "агент генерує NLE-проєкт, а не рендерить сам".
+          Ліцензія некомерційна - вивчаємо, не вендоримо.
+
+      - name: claude-video-editor
+        url: https://github.com/assafkip/claude-video-editor
+        stars: 15
+        license: MIT + Commons Clause
+        tier: watch
+        why: >
+          Обгортка над video-use + HyperFrames: різка по межах слів, вижжені субтитри,
+          посегментний колор-грейд, моушн-графіка на HTML/GSAP. Малий, але показує
+          UX діалогу з апрувом. Commons Clause забороняє продаж самого софту.
+
+  mcp_servers:
+    title: MCP-сервери та тулчейни для агентів
+    repos:
+      - name: kinocut
+        url: https://github.com/KyaniteLabs/mcp-video
+        stars: 139
+        license: Apache-2.0
+        tier: core
+        why: >
+          196 MCP-тулів і 167 CLI-команд навколо FFmpeg. Головна цінність - guardrails:
+          preflight-валідація перед рендером, "Video Receipts" для провенансу,
+          fail-closed на ризикових операціях (мікшування аудіо, межі фільтрів).
+          Саме цього бракує саморобним ffmpeg-обгорткам. Python 3.11+.
+
+      - name: Claude-Code-Video-Toolkit
+        url: https://github.com/wilwaldon/Claude-Code-Video-Toolkit
+        stars: 79
+        license: MIT
+        tier: study
+        why: >
+          Готовий шаблон проєкту під Claude Code: скіли (Remotion, Manim, YouTube Clipper,
+          FFmpeg), слеш-команди, тема і бренд-профілі, Playwright MCP для скрінкастів.
+          Референс структури .claude/ у нашому репо.
+
+  transcription:
+    title: Транскрибація, вирівнювання, діаризація, субтитри
+    repos:
+      - name: faster-whisper
+        url: https://github.com/SYSTRAN/faster-whisper
+        stars: 25300
+        license: MIT
+        tier: core
+        why: >
+          CTranslate2-рушій, до 4x швидше за openai/whisper при меншій памяті.
+          word_timestamps=True, BatchedInferencePipeline, Silero VAD, int8/fp16.
+          Підтримує large-v3, turbo, distil-large-v3. Дефолтний ASR-бекенд.
+
+      - name: whisperX
+        url: https://github.com/m-bain/whisperX
+        stars: 23900
+        license: BSD-2-Clause
+        tier: core
+        why: >
+          faster-whisper + VAD + forced alignment (wav2vec2) + діаризація (pyannote).
+          Точність таймкодів <100 мс - достатньо для karaoke-підсвітки слова.
+          Це джерело word-level сітки, на яку спирається весь монтаж по тексту.
+          Мінус: pyannote-моделі gated на HF (потрібен токен), важкий CUDA-стек.
+
+      - name: MOSS-Transcribe-Diarize
+        url: https://github.com/OpenMOSS/MOSS-Transcribe-Diarize
+        stars: 1900
+        license: Apache-2.0
+        tier: core
+        why: >
+          0.9B модель, 50+ мов, СПІЛЬНА транскрибація + діаризація одним проходом,
+          без окремого pyannote і його gated-ваг. Віддає JSON/SRT/ASS, вміє вжигати
+          в MP4 через ffmpeg. Перше місце MLC-SLM Challenge @ INTERSPEECH 2026.
+          Кандидат №1 на заміну звязки whisperX+pyannote, якщо якість по укр. підтвердиться.
+
+      - name: stable-ts
+        url: https://github.com/jianfch/stable-ts
+        stars: 2300
+        license: MIT
+        tier: tool
+        why: >
+          Уточнення таймкодів, forced alignment готового тексту до аудіо, регрупування
+          сегментів, придушення тиші. Віддає SRT/VTT/ASS/TSV/JSON.
+          УВАГА: репозиторій заархівовано 30.05.2026, розробка призупинена - беремо
+          як алгоритмічний референс регрупування, не як живу залежність.
+
+      - name: subsai
+        url: https://github.com/absadiki/subsai
+        stars: 1700
+        license: GPL-3.0-or-later
+        tier: study
+        why: >
+          Web-UI + CLI + Python-пакет над 8 бекендами (whisper, whisper.cpp, faster-whisper,
+          whisperX, stable-ts, HF, OpenAI API). Гарний референс абстракції "ASR-бекенд"
+          і експорту в SubRip/WebVTT/ASS/SSA/SUB/MPL2/TMP/JSON.
+          GPLv3 - тільки як референс, не вендоримо.
+
+  media_primitives:
+    title: Базові медіа-примітиви
+    repos:
+      - name: PySceneDetect
+        url: https://github.com/Breakthrough/PySceneDetect
+        stars: 5200
+        license: BSD-3-Clause
+        tier: tool
+        why: >
+          Детекція склейок і переходів (ContentDetector / AdaptiveDetector /
+          ThresholdDetector), нарізка на сцени, вигрузка ключових кадрів.
+          Дає агенту візуальну сітку на додачу до текстової.
+
+      - name: auto-editor
+        url: https://github.com/WyattBlue/auto-editor
+        stars: 5200
+        license: Unlicense (public domain)
+        tier: tool
+        why: >
+          Автовидалення тиші та мертвих зон по гучності й руху. Експорт у Premiere,
+          Resolve, Final Cut, ShotCut, Kdenlive. Public domain - код без обмежень.
+          Швидкий baseline для "почисти паузи" ще до будь-якої LLM.
+
+  rendering:
+    title: Рендеринг та композитинг
+    repos:
+      - name: OpenCut
+        url: https://github.com/OpenCut-app/OpenCut
+        stars: 88800
+        license: MIT
+        tier: watch
+        why: >
+          Ядро на Rust + TS/Next.js, web/desktop/mobile з однієї кодової бази, без вотермарок.
+          У роадмапі саме те, що нам треба: Editor API, MCP-сервер для AI-агентів,
+          headless mode (batch rendering), плагіни. УВАГА: проєкт зараз у стані повного
+          переписування, MCP і headless ЩЕ НЕ ГОТОВІ. Тримаємо як цільовий UI/таймлайн.
+
+      - name: remotion
+        url: https://github.com/remotion-dev/remotion
+        stars: 58400
+        license: Remotion License (компаніям потрібна платна ліцензія)
+        tier: watch
+        why: >
+          Відео як React-код, headless-рендер через Node API / Lambda / Vercel.
+          Ідеально для програмних титрів і моушн-графіки. УВАГА: НЕ безкоштовно
+          для компаній - перед використанням у продукті звірити LICENSE.md.

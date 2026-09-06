@@ -1,0 +1,16 @@
+# зовнішні репозиторії підтягуються скриптом, у git не зберігаємо
+vendor/
+media/
+out/
+.venv/
+node_modules/
+__pycache__/
+*.mp4
+*.mov
+*.mkv
+*.wav
+*.mp3
+.env
+
+# папки проєктів з медіа - локальні
+projects/
