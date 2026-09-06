@@ -219,6 +219,12 @@ def check(
             problems.append(Problem("error", f"репліка {index}: порожня"))
             continue
 
+        if cue.duration <= 0:
+            problems.append(
+                Problem("error", f"репліка {index}: нульова тривалість — не зʼявиться на екрані")
+            )
+            continue
+
         if not fits_lines(cue.text, opts):
             problems.append(
                 Problem(

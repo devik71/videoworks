@@ -19,7 +19,7 @@ from videoworks import edl as edl_mod
 from videoworks import fcpxml as fcpxml_mod
 from videoworks import filmstrip as filmstrip_mod
 from videoworks import scenes as scenes_mod
-from videoworks.asr import registry
+from videoworks.asr import registry, repair
 from videoworks.models import Edl, Scenes, Transcript
 from videoworks.text import plural
 
@@ -129,6 +129,14 @@ def transcribe(
     transcript = backend.transcribe(
         project.audio, language=lang, source=str(video), **extra
     )
+
+    transcript, repaired = repair.spread_degenerate(transcript)
+    if repaired:
+        console.print(
+            f"[yellow]{plural(repaired, 'слово', 'слова', 'слів')} без тривалості "
+            f"рознесено по проміжку між сусідами[/]"
+        )
+
     transcript.save(Path(out) if out else project.transcript_raw)
 
     target = Path(out) if out else project.transcript_raw
@@ -292,6 +300,18 @@ def cut(
     probe_data = _probe_of(project, video)
     duration = ingest.duration_of(probe_data)
     with_audio = ingest.has_audio(probe_data)
+
+    # Притягуємо план до сітки кадрів ДО рендеру й перемапування: інакше ffmpeg
+    # округлює кожен сегмент сам, похибки накопичуються, і субтитри поїдуть.
+    rate = fcpxml_mod.parse_rate(probe_data)
+    snapped = edl_mod.quantize(plan, rate)
+    drift = abs(snapped.duration - plan.duration)
+    if drift > 0.001:
+        console.print(
+            f"[dim]план притягнуто до сітки {float(rate):g} к/с "
+            f"({drift * 1000:.0f} мс різниці)[/]"
+        )
+    plan = snapped
 
     problems = edl_mod.preflight(plan, source_duration=duration)
     for problem in problems:

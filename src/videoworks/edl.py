@@ -7,6 +7,8 @@ EDL — контракт між агентом і рендером. Агент �
 
 from __future__ import annotations
 
+import math
+from fractions import Fraction
 from itertools import pairwise
 
 from videoworks.diagnostics import Problem, errors
@@ -21,6 +23,7 @@ __all__ = [
     "from_spans",
     "locate",
     "preflight",
+    "quantize",
     "remap_transcript",
     "spans_from_speech",
 ]
@@ -86,6 +89,40 @@ def spans_from_speech(
         else:
             merged.append(span)
     return merged
+
+
+def quantize(edl: Edl, fps: float | Fraction) -> Edl:
+    """Притягує межі сегментів до сітки кадрів.
+
+    Без цього ffmpeg округлює кожен сегмент сам, похибки накопичуються, і
+    змонтоване відео виявляється довшим за план: на 203 сегментах — майже на
+    секунду. Таймкоди ж перемаплюються точною арифметикою, тож субтитри
+    поїхали б тим сильніше, чим далі від початку.
+
+    Після притягування довжина кожного сегмента — ціле число кадрів, і
+    округлювати вже нічого.
+    """
+    rate = Fraction(fps).limit_denominator(1000000)
+    segments: list[EdlSegment] = []
+    clock = 0  # у кадрах, щоб не накопичувати похибку в секундах
+
+    for segment in edl.segments:
+        # Розширюємо назовні, а не округлюємо до найближчого: інакше
+        # квантування зрізало б до 20 мс на межі, тобто атаку приголосного.
+        start = math.floor(Fraction(segment.src_in).limit_denominator(1000000) * rate)
+        end = math.ceil(Fraction(segment.src_out).limit_denominator(1000000) * rate)
+        if end <= start:
+            continue  # сегмент коротший за кадр — його все одно нема чим показати
+        segments.append(
+            EdlSegment(
+                src_in=float(round(Fraction(start) / rate, 6)),
+                src_out=float(round(Fraction(end) / rate, 6)),
+                dst_out=float(round(Fraction(clock) / rate, 6)),
+            )
+        )
+        clock += end - start
+
+    return Edl(source=edl.source, segments=segments, audio=edl.audio)
 
 
 # --------------------------------------------------------------------------- #

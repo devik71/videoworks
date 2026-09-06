@@ -11,6 +11,7 @@ from videoworks.edl import (
     from_spans,
     locate,
     preflight,
+    quantize,
     remap_transcript,
     spans_from_speech,
 )
@@ -79,6 +80,58 @@ def test_spans_merge_after_padding() -> None:
 # --------------------------------------------------------------------------- #
 # Preflight
 # --------------------------------------------------------------------------- #
+
+
+def test_quantize_expands_outward_never_clipping() -> None:
+    # 1.013 → 1.00, 4.987 → 5.00: межі розсуваються назовні, щоб квантування
+    # не зрізало атаку приголосного на початку слова.
+    plan = quantize(from_spans("raw.mp4", [(1.013, 4.987)]), 25)
+    segment = plan.segments[0]
+    assert segment.src_in == pytest.approx(1.0)
+    assert segment.src_out == pytest.approx(5.0)
+    assert segment.src_in <= 1.013
+    assert segment.src_out >= 4.987
+
+
+def test_quantized_segments_last_whole_frames() -> None:
+    spans = [(i * 3.017, i * 3.017 + 1.993) for i in range(20)]
+    plan = quantize(from_spans("raw.mp4", spans), 25)
+    for segment in plan.segments:
+        assert (segment.duration * 25) == pytest.approx(round(segment.duration * 25))
+
+
+def test_quantized_timeline_stays_seamless() -> None:
+    spans = [(i * 3.017, i * 3.017 + 1.993) for i in range(20)]
+    plan = quantize(from_spans("raw.mp4", spans), 25)
+    # Найважливіше: після притягування dst_out усе ще суцільний, інакше
+    # preflight відхилив би власний результат.
+    assert preflight(plan) == []
+
+
+def test_quantize_promotes_subframe_segment_to_one_frame() -> None:
+    # Розширення назовні означає, що 10 мс стають кадром, а не зникають:
+    # краще один кадр, ніж утрачений шматок.
+    plan = quantize(from_spans("raw.mp4", [(0.0, 5.0), (10.0, 10.01)]), 25)
+    assert len(plan.segments) == 2
+    assert plan.segments[1].duration == pytest.approx(0.04)
+
+
+def test_quantize_handles_ntsc_rate() -> None:
+    from fractions import Fraction
+
+    rate = Fraction(30000, 1001)
+    plan = quantize(from_spans("raw.mp4", [(1.0, 4.0), (10.0, 12.0)]), rate)
+    for segment in plan.segments:
+        frames = segment.duration * float(rate)
+        assert frames == pytest.approx(round(frames), abs=1e-3)
+
+
+def test_quantize_is_idempotent() -> None:
+    once = quantize(from_spans("raw.mp4", [(1.013, 4.987), (9.001, 12.999)]), 25)
+    twice = quantize(once, 25)
+    assert [(s.src_in, s.src_out, s.dst_out) for s in once.segments] == [
+        (s.src_in, s.src_out, s.dst_out) for s in twice.segments
+    ]
 
 
 def test_preflight_accepts_sane_plan() -> None:

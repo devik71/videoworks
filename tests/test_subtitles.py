@@ -114,6 +114,32 @@ def test_cue_breaks_on_long_pause() -> None:
     assert cues[1].text.startswith("Друга")
 
 
+def test_zero_length_words_still_yield_a_visible_cue() -> None:
+    # Whisper на довгому матеріалі віддає кілька відсотків слів із start == end.
+    # Репліка, зібрана лише з них, раніше виходила нульової тривалості.
+    transcript = transcript_from([
+        ("перше", 10.0, 12.0),
+        ("друге", 14.0, 14.0),
+        ("третє", 14.0, 14.0),
+        ("четверте", 14.08, 14.2),
+    ])
+    cues = build_cues(transcript)
+    assert all(cue.duration > 0 for cue in cues)
+    assert all(cue.cps != float("inf") for cue in cues)
+
+
+def test_cue_squeezed_by_its_neighbour_stays_visible() -> None:
+    # Наступна репліка починається за 80 мс — рівно min_gap. Затиснення
+    # до неї зводило тривалість у нуль.
+    transcript = transcript_from([
+        ("довга", 0.0, 5.0), ("фраза", 5.1, 9.9),
+        ("вклинення", 10.0, 10.0),
+        ("далі", 10.08, 12.0),
+    ])
+    for cue in build_cues(transcript):
+        assert cue.duration >= 0.2 - 1e-6
+
+
 def test_cues_never_overlap() -> None:
     cues = build_cues(evenly(" ".join(f"слово{i}" for i in range(60))))
     assert len(cues) > 1
