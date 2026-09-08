@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import math
 import mimetypes
+import sys
 from collections.abc import Callable
 from functools import partial
 from http import HTTPStatus
@@ -388,13 +389,26 @@ def _escape(value: str) -> str:
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+class _Server(ThreadingHTTPServer):
+    def handle_error(self, request: object, client_address: object) -> None:
+        """Обрив зʼєднання — не збій, і трейсбека він не вартий.
+
+        Плеєр тримає зʼєднання відкритим (HTTP/1.1) і кидає його на кожній
+        перемотці. Базовий socketserver друкує на це повний трейсбек із потоку,
+        і консоль забивається ними швидше, ніж встигаєш прочитати свій вивід.
+        Решта помилок лишається видимою — глушимо тільки розрив.
+        """
+        if not isinstance(sys.exception(), ConnectionError):
+            super().handle_error(request, client_address)
+
+
 def build_server(
     *,
     video: Path,
     load: Callable[[], dict],
     title: str,
     port: int = 8770,
-) -> ThreadingHTTPServer:
+) -> _Server:
     """Піднімає сервер на 127.0.0.1. Порт 0 — вибрати вільний самому."""
     handler = partial(_Handler, page=page(title), load=load, video=video)
-    return ThreadingHTTPServer(("127.0.0.1", port), handler)
+    return _Server(("127.0.0.1", port), handler)

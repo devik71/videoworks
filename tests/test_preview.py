@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
+import urllib.error
+import urllib.request
 
 import pytest
 
 from videoworks.editor import analyze_cues
-from videoworks.preview import page, parse_range, payload
+from videoworks.preview import build_server, page, parse_range, payload
 from videoworks.subtitles import Cue
 
 
@@ -102,3 +105,91 @@ def test_page_keeps_javascript_intact() -> None:
 def test_page_escapes_title() -> None:
     # Заголовок — це ім'я папки проєкту, і воно потрапляє і в <title>, і в <h1>.
     assert "&lt;b&gt;назва&lt;/b&gt;" in page("<b>назва</b>")
+
+
+# --------------------------------------------------------------------------- #
+# Живий сервер
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def server(tmp_path):
+    """Піднімає справжній сервер на вільному порті."""
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(bytes(range(256)) * 8)  # 2048 байтів
+
+    running = build_server(
+        video=video,
+        load=lambda: payload(analyze_cues([cue("Привіт, світе.", 0.0, 3.0)])),
+        title="тест",
+        port=0,
+    )
+    thread = threading.Thread(target=running.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{running.server_port}"
+    finally:
+        running.shutdown()
+        running.server_close()
+        thread.join(timeout=5)
+
+
+def test_server_serves_page(server: str) -> None:
+    with urllib.request.urlopen(f"{server}/") as response:
+        body = response.read().decode("utf-8")
+    assert response.headers["Content-Type"].startswith("text/html")
+    assert "тест" in body
+
+
+def test_server_serves_cues(server: str) -> None:
+    with urllib.request.urlopen(f"{server}/cues.json") as response:
+        data = json.loads(response.read())
+    assert data["cues"][0]["lines"] == ["Привіт, світе."]
+
+
+def test_server_answers_range_with_partial_content(server: str) -> None:
+    request = urllib.request.Request(f"{server}/video", headers={"Range": "bytes=100-199"})
+    with urllib.request.urlopen(request) as response:
+        body = response.read()
+    assert response.status == 206
+    assert response.headers["Content-Range"] == "bytes 100-199/2048"
+    assert body == (bytes(range(256)) * 8)[100:200]
+
+
+def test_server_reports_size_without_range(server: str) -> None:
+    with urllib.request.urlopen(f"{server}/video") as response:
+        assert response.headers["Content-Length"] == "2048"
+        assert response.headers["Accept-Ranges"] == "bytes"
+
+
+def test_server_rejects_range_past_the_file(server: str) -> None:
+    request = urllib.request.Request(f"{server}/video", headers={"Range": "bytes=9000-9100"})
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        urllib.request.urlopen(request)
+    assert caught.value.code == 416
+
+
+def test_server_has_no_other_routes(server: str) -> None:
+    # Роздачі каталогу немає — отже, і виходу за межі проєкту теж.
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        urllib.request.urlopen(f"{server}/../../etc/passwd")
+    assert caught.value.code == 404
+
+
+def test_dropped_connection_is_not_reported(tmp_path, capsys) -> None:
+    """Обрив зʼєднання глушимо, справжню помилку — ні."""
+    running = build_server(video=tmp_path, load=dict, title="t", port=0)
+    try:
+        try:
+            raise ConnectionAbortedError(10053, "aborted")
+        except ConnectionAbortedError:
+            running.handle_error(None, ("127.0.0.1", 1))
+        assert capsys.readouterr().err == ""
+
+        try:
+            raise ValueError("справжня біда")
+        except ValueError:
+            running.handle_error(None, ("127.0.0.1", 1))
+        assert "справжня біда" in capsys.readouterr().err
+    finally:
+        running.server_close()
