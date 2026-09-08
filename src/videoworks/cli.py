@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -14,7 +16,7 @@ from rich.table import Table
 from videoworks import benchmark as benchmark_mod
 from videoworks import brief as brief_mod
 from videoworks import burn as burn_mod
-from videoworks import diagnostics, ingest, metrics, paths, render, subtitles, translate
+from videoworks import diagnostics, editor, ingest, metrics, paths, render, subtitles, translate
 from videoworks import edl as edl_mod
 from videoworks import fcpxml as fcpxml_mod
 from videoworks import filmstrip as filmstrip_mod
@@ -22,6 +24,14 @@ from videoworks import scenes as scenes_mod
 from videoworks.asr import registry, repair
 from videoworks.models import Edl, Scenes, Transcript
 from videoworks.text import plural
+
+# Коли вивід перенаправлено, Python бере не UTF-8, а ANSI-кодування системи —
+# під Windows це cp1251. Символів «×» і «→», які трапляються в повідомленнях,
+# там немає, і команда падала на UnicodeEncodeError рівно тоді, коли мала
+# показати знайдену проблему. Кодування лишаємо, псуємо тільки такий символ.
+for _stream in (sys.stdout, sys.stderr):
+    with contextlib.suppress(AttributeError, ValueError, OSError):
+        _stream.reconfigure(errors="replace")
 
 app = typer.Typer(
     add_completion=False,
@@ -628,6 +638,64 @@ def check(
     console.print(f"[dim]{counted} перевірено[/]")
     if failures:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def edit(
+    project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
+    lang: Annotated[str | None, typer.Option(help="Мова субтитрів")] = None,
+    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
+    cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
+    trim: Annotated[int | None, typer.Option("--trim", help="Скоротити репліки до N символів")] = None,
+    only_problems: Annotated[bool, typer.Option("--problems", help="Лише проблемні репліки")] = False,
+    write: Annotated[bool, typer.Option("--write", help="Записати правку назад у .srt")] = False,
+    force: Annotated[bool, typer.Option("--force", help="Записати навіть із помилками")] = False,
+) -> None:
+    """Показує кожну репліку з метриками; --trim скорочує задовгі."""
+    project = paths.resolve(project_name)
+    code = lang or _default_lang(project)
+    path = project.subs / f"{code}.srt"
+    if not path.exists():
+        raise typer.BadParameter(f"Немає {path}. Спочатку subtitle.")
+
+    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+    cues = subtitles.load_cues(path)
+
+    if trim is not None:
+        shortened = editor.trim_cues(cues, trim, opts)
+        changed = sum(1 for old, new in zip(cues, shortened, strict=True) if old.text != new.text)
+        cues = shortened
+        counted = plural(changed, "репліку", "репліки", "реплік")
+        console.print(f"[yellow]Скорочено до {trim} символів: {counted}[/]")
+
+    reports = editor.analyze_cues(cues, opts)
+    if only_problems:
+        reports = [report for report in reports if report.problems]
+    console.print(editor.format_report(reports), highlight=False, markup=False)
+
+    failures = _report(translate.check(cues, opts), f"{path.name}: усе гаразд")
+
+    # Без --write команда лишається оглядовою: правку видно, файл цілий.
+    if not write:
+        if trim is not None:
+            console.print("[dim]Нічого не записано — додай --write.[/]")
+        raise typer.Exit(code=1 if failures else 0)
+
+    if failures and not force:
+        counted = plural(failures, "помилка", "помилки", "помилок")
+        console.print(f"[red]Не записано: {counted}. --force щоб усе одно.[/]")
+        raise typer.Exit(code=1)
+
+    subtitles.save(cues, path)
+    console.print(f"[green]Записано[/] {path}")
+
+    # Перезаписуємо лише .srt: у .ass лежить оформлення, зібране в subtitle
+    # разом зі шрифтом і роздільністю, і сліпий перезапис його б знеособив.
+    for suffix in ("ass", "vtt"):
+        sibling = project.subs / f"{code}.{suffix}"
+        if sibling.exists():
+            console.print(f"[yellow]{sibling.name} лишився старим — перезбери subtitle.[/]")
 
 
 @app.command()
