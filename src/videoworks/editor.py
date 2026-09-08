@@ -163,14 +163,18 @@ def _severity(report: CueReport) -> str:
     return "warning" if levels else "ok"
 
 
-def format_report(reports: list[CueReport]) -> str:
-    """Складає звіт для терміналу: підсумок, потім репліка за реплікою."""
+def format_report(reports: list[CueReport], *, only_problems: bool = False) -> str:
+    """Складає звіт для терміналу: підсумок, потім репліка за реплікою.
+
+    Фільтрує сам, а не приймає вже проріджений список: підсумок має рахувати
+    весь файл. Інакше «Реплік: 69» при 181 репліці читалось би як розмір файлу.
+    """
     errors = sum(1 for r in reports if any(p.level == "error" for p in r.problems))
     warnings = sum(1 for r in reports if any(p.level == "warning" for p in r.problems))
 
     lines = [f"Реплік: {len(reports)} | помилок: {errors} | попереджень: {warnings}", ""]
 
-    for report in reports:
+    for report in (r for r in reports if r.problems) if only_problems else reports:
         status = _STATUS[_severity(report)]
         lines.append(
             f"{status} [{report.index:>3}] {report.cue.start:7.2f}–{report.cue.end:.2f} "

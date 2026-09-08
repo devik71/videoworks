@@ -670,11 +670,25 @@ def edit(
         console.print(f"[yellow]Скорочено до {trim} символів: {counted}[/]")
 
     reports = editor.analyze_cues(cues, opts)
-    if only_problems:
-        reports = [report for report in reports if report.problems]
-    console.print(editor.format_report(reports), highlight=False, markup=False)
+    console.print(
+        editor.format_report(reports, only_problems=only_problems),
+        highlight=False,
+        markup=False,
+    )
 
-    failures = _report(translate.check(cues, opts), f"{path.name}: усе гаразд")
+    # Присуд лишається за translate.check — тим самим, що вирішує в check і
+    # apply. Але друкувати його порядково нема сенсу: ті самі проблеми щойно
+    # стояли навпроти своїх реплік, і вдруге це лише розсуває звіт.
+    problems = translate.check(cues, opts)
+    failures = len(diagnostics.errors(problems))
+    if not problems:
+        console.print(f"[green]{path.name}: усе гаразд[/]")
+    elif failures:
+        counted = plural(failures, "помилка", "помилки", "помилок")
+        console.print(f"[red]{path.name}: {counted}[/]")
+    else:
+        counted = plural(len(problems), "попередження", "попередження", "попереджень")
+        console.print(f"[yellow]{path.name}: {counted}[/]")
 
     # Без --write команда лишається оглядовою: правку видно, файл цілий.
     if not write:

@@ -119,5 +119,15 @@ def test_format_report_marks_severity() -> None:
     assert marks == ["x", "!", "·"]
 
 
+def test_format_report_counts_whole_file_when_filtering() -> None:
+    fast = cue("Репліка, яку ніхто не встигне прочитати за секунду", 0.0, 1.0)
+    reports = analyze_cues([cue("Норм."), fast, cue("Теж норм.")])
+    output = format_report(reports, only_problems=True)
+    assert "Реплік: 3" in output
+    assert "попереджень: 1" in output
+    assert output.count("симв/с") == 2  # рядок репліки + її попередження
+    assert "Норм." not in output
+
+
 def test_format_report_survives_empty_input() -> None:
     assert "Реплік: 0" in format_report([])
