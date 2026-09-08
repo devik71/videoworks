@@ -6,6 +6,7 @@ import contextlib
 import json
 import shutil
 import sys
+import webbrowser
 from pathlib import Path
 from typing import Annotated
 
@@ -16,7 +17,17 @@ from rich.table import Table
 from videoworks import benchmark as benchmark_mod
 from videoworks import brief as brief_mod
 from videoworks import burn as burn_mod
-from videoworks import diagnostics, editor, ingest, metrics, paths, render, subtitles, translate
+from videoworks import (
+    diagnostics,
+    editor,
+    ingest,
+    metrics,
+    paths,
+    preview,
+    render,
+    subtitles,
+    translate,
+)
 from videoworks import edl as edl_mod
 from videoworks import fcpxml as fcpxml_mod
 from videoworks import filmstrip as filmstrip_mod
@@ -163,6 +174,13 @@ def _default_lang(project: paths.Project) -> str:
         if path.exists():
             return Transcript.load(path).language
     raise typer.BadParameter("Не вдалось визначити мову — вкажи явно.")
+
+
+def _subtitled_video(project: paths.Project) -> Path:
+    """Відео, до якого прив'язані субтитри: змонтоване, якщо воно є."""
+    if project.transcript_cut.exists() and project.cut_video.exists():
+        return project.cut_video
+    return project.source_video()
 
 
 def _probe_of(project: paths.Project, video: Path) -> dict:
@@ -710,6 +728,52 @@ def edit(
         sibling = project.subs / f"{code}.{suffix}"
         if sibling.exists():
             console.print(f"[yellow]{sibling.name} лишився старим — перезбери subtitle.[/]")
+
+
+@app.command(name="preview")
+def preview_cmd(
+    project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
+    lang: Annotated[str | None, typer.Option(help="Мова субтитрів")] = None,
+    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
+    cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
+    port: Annotated[int, typer.Option(help="Порт; 0 — вибрати вільний")] = 8770,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Відкрити браузер")] = True,
+) -> None:
+    """Піднімає локальний переглядач: відео, підпис у кадрі й список реплік."""
+    project = paths.resolve(project_name)
+    code = lang or _default_lang(project)
+    path = project.subs / f"{code}.srt"
+    if not path.exists():
+        raise typer.BadParameter(f"Немає {path}. Спочатку subtitle.")
+
+    video = _subtitled_video(project)
+    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+
+    # Читаємо файл на кожен запит, а не раз при старті: кнопка «перечитати»
+    # має показувати правку, зроблену в редакторі просто зараз.
+    def load() -> dict:
+        return preview.payload(editor.analyze_cues(subtitles.load_cues(path), opts))
+
+    try:
+        server = preview.build_server(
+            video=video, load=load, title=f"{project.root.name} · {path.name}", port=port
+        )
+    except OSError as exc:
+        raise typer.BadParameter(f"Порт {port} зайнятий ({exc}). Візьми інший або --port 0.") from exc
+
+    url = f"http://127.0.0.1:{server.server_port}/"
+    console.print(f"[green]Переглядач[/] {url}")
+    console.print(f"[dim]{video.name} + {path.name} · Ctrl+C щоб спинити[/]")
+    if open_browser:
+        webbrowser.open(url)
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        console.print("\n[dim]Спинено[/]")
+    finally:
+        server.server_close()
 
 
 @app.command()
