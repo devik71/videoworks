@@ -9,6 +9,9 @@ from videoworks.models import Word
 _BEFORE_PUNCT = re.compile(r"\s+([,.!?;:…%)\]}»])")
 _AFTER_OPEN = re.compile(r"([(\[{«])\s+")
 _HYPHEN = re.compile(r"\s+-(?=\w)")
+# Whisper ріже українське слово по апострофу: "з", "'єднання". Апостроф у
+# нас стоїть лише перед я, ю, є, ї, тож лапку перед іншим словом не зачепить.
+_APOSTROPHE = re.compile(r"(?<=[^\W\d_])\s+(['’ʼ])(?=[яюєїЯЮЄЇ])")
 _SPACES = re.compile(r"\s{2,}")
 
 
@@ -25,9 +28,11 @@ def plural(count: int, one: str, few: str, many: str) -> str:
 def join_words(words: list[Word]) -> str:
     """Whisper віддає пунктуацію та частини складних слів окремими токенами
     ("Word", "-level"), тому наївне склеювання пробілами дає "Word -level".
+    Так само з апострофом: "з 'єднання" замість "з'єднання".
     """
     text = " ".join(word.w.strip() for word in words if word.w.strip())
     text = _BEFORE_PUNCT.sub(r"\1", text)
     text = _AFTER_OPEN.sub(r"\1", text)
     text = _HYPHEN.sub("-", text)
+    text = _APOSTROPHE.sub(r"\1", text)
     return _SPACES.sub(" ", text).strip()

@@ -39,6 +39,13 @@ ORPHANS = frozenset(
 # Показати її з накладанням на сусідню — менше зло, ніж не показати взагалі.
 MIN_VISIBLE = 0.2
 
+# Скільки символів на рядок, якщо кадр не підказує менше. Стеля для
+# горизонтального відео; вертикальне отримує стільки, скільки влазить.
+LINE_CEILING = 42
+_FONT_SHARE = 0.05  # кегль — частка коротшої сторони кадру
+_GLYPH_EM = 0.6  # середня ширина жирної кирилиці в Arial, частка кегля
+_SAFE_WIDTH = 0.9  # підпис має лишатись у рамці гарантованої видимості
+
 _ORPHAN_PENALTY = 400.0  # ≈ 20 символів дисбалансу — дорожче за будь-яку кривизну
 _PUNCT_BONUS = 120.0
 _LINE_PENALTY = 60.0  # за інших рівних краще менше рядків
@@ -342,7 +349,7 @@ class SubtitleStyle:
     """Оформлення для ASS і вжигання. Основа бренд-профілю."""
 
     fontname: str = "Arial"
-    fontsize: int | None = None  # None → 5% висоти кадру
+    fontsize: int | None = None  # None → 5% коротшої сторони кадру
     bold: bool = True
     primary: str = "#FFFFFF"
     outline_color: str = "#000000"
@@ -350,6 +357,29 @@ class SubtitleStyle:
     shadow: float = 0.6
     margin_v: int | None = None  # None → 6% висоти кадру
     alignment: int = 2  # знизу по центру
+
+
+def font_size_for(resolution: tuple[int, int] | None) -> int:
+    """Кегль від коротшої сторони кадру.
+
+    Від висоти рахувати не можна: у вертикальному відео висота найбільша, і
+    кегль виходив би таким, що рядок у 42 символи вдвічі ширший за кадр.
+    Для горизонтального відео коротша сторона і є висотою — там нічого не міняється.
+    """
+    short = min(resolution) if resolution else 1080
+    return max(16, round(short * _FONT_SHARE))
+
+
+def line_chars_for(resolution: tuple[int, int] | None, ceiling: int = LINE_CEILING) -> int:
+    """Скільки символів реально влазить у рядок при кеглі `font_size_for`.
+
+    Розкладка, яка про це не знає, видає два рядки, а libass потім сам
+    переносить кожен утретє — і підпис закриває пів кадру.
+    """
+    if not resolution:
+        return ceiling
+    fits = int(resolution[0] * _SAFE_WIDTH / (_GLYPH_EM * font_size_for(resolution)))
+    return max(16, min(ceiling, fits))
 
 
 def _color(value: str) -> pysubs2.Color:
@@ -375,7 +405,7 @@ def build_ssa(
 
     subs.styles["Default"] = pysubs2.SSAStyle(
         fontname=style.fontname,
-        fontsize=style.fontsize or max(16, round(height * 0.05)),
+        fontsize=style.fontsize or font_size_for(resolution),
         bold=style.bold,
         primarycolor=_color(style.primary),
         outlinecolor=_color(style.outline_color),

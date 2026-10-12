@@ -192,6 +192,30 @@ def _probe_of(project: paths.Project, video: Path) -> dict:
     return ingest.probe(video)
 
 
+def _resolution(project: paths.Project, video: Path | None = None) -> tuple[int, int] | None:
+    """Розмір кадру відео, до якого належать субтитри; None, якщо відео немає.
+
+    Кеш probe.json описує сире відео — для змонтованого питаємо ffprobe заново.
+    """
+    try:
+        video = video or _subtitled_video(project)
+        data = _probe_of(project, video) if video == project.source_video() else ingest.probe(video)
+    except (FileNotFoundError, ValueError, RuntimeError):
+        return None
+    return ingest.resolution_of(data)
+
+
+def _line_limit(project: paths.Project, max_line: int | None, video: Path | None = None) -> int:
+    """Ліміт рядка: заданий явно або той, що влазить у кадр.
+
+    Один на всі команди. Інакше subtitle розклав би вертикальне відео на 30
+    символів, а apply чи studio перескладали б ті самі репліки на 42.
+    """
+    if max_line is not None:
+        return max_line
+    return subtitles.line_chars_for(_resolution(project, video))
+
+
 @app.command(name="scenes")
 def scenes_cmd(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
@@ -497,7 +521,9 @@ def subtitle(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
     formats: Annotated[str, typer.Option("--format", help="Через кому: srt, vtt, ass")] = "srt,ass",
     lang: Annotated[str | None, typer.Option(help="Код мови для назви файлів")] = None,
-    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_line: Annotated[
+        int | None, typer.Option(help="Максимум символів у рядку; типово — скільки влазить у кадр")
+    ] = None,
     max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
     cps: Annotated[float, typer.Option(help="Стеля швидкості читання, символів/с")] = 17.0,
     font: Annotated[str, typer.Option(help="Шрифт для ASS і вжигання")] = "Arial",
@@ -526,10 +552,12 @@ def subtitle(
     console.print(f"[dim]джерело: {source.name} + {video.name}[/]")
 
     # Кеш probe.json описує сире відео — для змонтованого питаємо ffprobe заново.
-    probe_data = _probe_of(project, video) if video == project.source_video() else ingest.probe(video)
-    resolution = ingest.resolution_of(probe_data)
+    resolution = _resolution(project, video)
+    limit = max_line if max_line is not None else subtitles.line_chars_for(resolution)
+    if limit < subtitles.LINE_CEILING and max_line is None and resolution:
+        console.print(f"[dim]кадр {resolution[0]}×{resolution[1]} — рядок до {limit} символів[/]")
 
-    options = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+    options = subtitles.CueOptions(max_line_chars=limit, max_lines=max_lines, max_cps=cps)
     cues = subtitles.build_cues(transcript, options)
     if not cues:
         raise typer.BadParameter("У транскрипті немає слів — нема з чого робити субтитри.")
@@ -644,7 +672,9 @@ def worksheet(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
     to: Annotated[str, typer.Option("--to", help="Цільова мова, напр. en")],
     lang: Annotated[str | None, typer.Option(help="Мова оригіналу субтитрів")] = None,
-    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_line: Annotated[
+        int | None, typer.Option(help="Максимум символів у рядку; типово — скільки влазить у кадр")
+    ] = None,
     max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
     cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
     save: Annotated[bool, typer.Option("--save", help="Записати у subs/<to>.draft.md")] = False,
@@ -656,7 +686,9 @@ def worksheet(
     if not source_path.exists():
         raise typer.BadParameter(f"Немає {source_path}. Спочатку subtitle.")
 
-    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+    opts = subtitles.CueOptions(
+        max_line_chars=_line_limit(project, max_line), max_lines=max_lines, max_cps=cps
+    )
     text = translate.worksheet(
         subtitles.load_cues(source_path),
         source_lang=code,
@@ -680,7 +712,9 @@ def apply_cmd(
     source: Annotated[str | None, typer.Option("--from", help="Мова оригіналу субтитрів")] = None,
     draft: Annotated[str | None, typer.Option(help="Файл аркуша; типово subs/<lang>.draft.md")] = None,
     formats: Annotated[str, typer.Option("--format", help="Через кому: srt, vtt, ass")] = "srt,ass",
-    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_line: Annotated[
+        int | None, typer.Option(help="Максимум символів у рядку; типово — скільки влазить у кадр")
+    ] = None,
     max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
     cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
     force: Annotated[bool, typer.Option("--force", help="Записати навіть із помилками")] = False,
@@ -696,7 +730,9 @@ def apply_cmd(
     if not draft_path.exists():
         raise typer.BadParameter(f"Немає {draft_path}. Спочатку worksheet --save і переклад.")
 
-    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+    opts = subtitles.CueOptions(
+        max_line_chars=_line_limit(project, max_line), max_lines=max_lines, max_cps=cps
+    )
     original = subtitles.load_cues(original_path)
     translations = translate.parse_draft(draft_path.read_text(encoding="utf-8-sig"))
 
@@ -721,7 +757,9 @@ def apply_cmd(
         raise typer.Exit(code=1)
 
     for suffix in (f.strip().lstrip(".") for f in formats.split(",") if f.strip()):
-        path = subtitles.save(translated, project.subs / f"{lang}.{suffix}")
+        path = subtitles.save(
+            translated, project.subs / f"{lang}.{suffix}", resolution=_resolution(project)
+        )
         console.print(f"  {path}")
 
 
@@ -729,7 +767,9 @@ def apply_cmd(
 def check(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
     lang: Annotated[str | None, typer.Option(help="Яку мову перевіряти")] = None,
-    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_line: Annotated[
+        int | None, typer.Option(help="Максимум символів у рядку; типово — скільки влазить у кадр")
+    ] = None,
     max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
     cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
 ) -> None:
@@ -740,7 +780,9 @@ def check(
     if not path.exists():
         raise typer.BadParameter(f"Немає {path}.")
 
-    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+    opts = subtitles.CueOptions(
+        max_line_chars=_line_limit(project, max_line), max_lines=max_lines, max_cps=cps
+    )
     cues = subtitles.load_cues(path)
     failures = _report(translate.check(cues, opts), f"{path.name}: усе гаразд")
     counted = plural(len(cues), "репліка", "репліки", "реплік")
@@ -753,7 +795,9 @@ def check(
 def edit(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
     lang: Annotated[str | None, typer.Option(help="Мова субтитрів")] = None,
-    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_line: Annotated[
+        int | None, typer.Option(help="Максимум символів у рядку; типово — скільки влазить у кадр")
+    ] = None,
     max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
     cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
     trim: Annotated[int | None, typer.Option("--trim", help="Скоротити репліки до N символів")] = None,
@@ -768,7 +812,9 @@ def edit(
     if not path.exists():
         raise typer.BadParameter(f"Немає {path}. Спочатку subtitle.")
 
-    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+    opts = subtitles.CueOptions(
+        max_line_chars=_line_limit(project, max_line), max_lines=max_lines, max_cps=cps
+    )
     cues = subtitles.load_cues(path)
 
     if trim is not None:
@@ -850,7 +896,9 @@ def _serve(server, *, label: str, what: str, open_browser: bool) -> None:
 def preview_cmd(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
     lang: Annotated[str | None, typer.Option(help="Мова субтитрів")] = None,
-    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_line: Annotated[
+        int | None, typer.Option(help="Максимум символів у рядку; типово — скільки влазить у кадр")
+    ] = None,
     max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
     cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
     port: Annotated[int, typer.Option(help="Порт; 0 — вибрати вільний")] = 8770,
@@ -859,7 +907,9 @@ def preview_cmd(
     """Піднімає локальний переглядач: відео, підпис у кадрі й список реплік."""
     project = paths.resolve(project_name)
     _, path, video = _open_subs(project, lang)
-    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+    opts = subtitles.CueOptions(
+        max_line_chars=_line_limit(project, max_line), max_lines=max_lines, max_cps=cps
+    )
 
     # Читаємо файл на кожен запит, а не раз при старті: кнопка «перечитати»
     # має показувати правку, зроблену в редакторі просто зараз.
@@ -885,7 +935,9 @@ def preview_cmd(
 def studio_cmd(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
     lang: Annotated[str | None, typer.Option(help="Мова субтитрів")] = None,
-    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_line: Annotated[
+        int | None, typer.Option(help="Максимум символів у рядку; типово — скільки влазить у кадр")
+    ] = None,
     max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
     cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
     port: Annotated[int, typer.Option(help="Порт; 0 — вибрати вільний")] = 8771,
@@ -894,7 +946,9 @@ def studio_cmd(
     """Піднімає візуальний редактор: правка тексту й таймкодів поверх кадру."""
     project = paths.resolve(project_name)
     code, path, video = _open_subs(project, lang)
-    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+    opts = subtitles.CueOptions(
+        max_line_chars=_line_limit(project, max_line), max_lines=max_lines, max_cps=cps
+    )
 
     def store(cues: list[subtitles.Cue], force: bool) -> dict:
         subtitles.save(cues, path)

@@ -7,6 +7,8 @@ from videoworks.subtitles import (
     CueOptions,
     build_cues,
     build_ssa,
+    font_size_for,
+    line_chars_for,
     wrap_lines,
 )
 from videoworks.text import join_words
@@ -219,6 +221,18 @@ def test_join_words_handles_hyphen_and_punctuation() -> None:
     assert join_words(words) == "Word-level таймкоди, так"
 
 
+def test_join_words_glues_ukrainian_apostrophe() -> None:
+    """Whisper віддає "з" і "'єднання" окремо — пробілу між ними бути не може."""
+    words = [
+        Word(w="з", start=0.0, end=0.2),
+        Word(w="'єднання", start=0.2, end=0.6),
+        Word(w="пʼять", start=0.6, end=0.9),
+        Word(w="сім", start=0.9, end=1.1),
+        Word(w="'quoted'", start=1.1, end=1.5),
+    ]
+    assert join_words(words) == "з'єднання пʼять сім 'quoted'"
+
+
 def test_srt_roundtrip(tmp_path) -> None:
     from videoworks.subtitles import save
 
@@ -233,4 +247,19 @@ def test_ass_uses_frame_relative_size() -> None:
     cues = build_cues(evenly("перше друге третє"))
     subs = build_ssa(cues, resolution=(1920, 1080))
     assert subs.info["PlayResY"] == "1080"
+    assert subs.styles["Default"].fontsize == 54
+
+
+def test_landscape_keeps_the_classic_line() -> None:
+    assert line_chars_for((1920, 1080)) == 42
+    assert line_chars_for((1280, 720)) == 42
+    assert line_chars_for(None) == 42
+
+
+def test_portrait_line_fits_the_frame() -> None:
+    """Вертикальне відео: кегль від ширини, і рядок не ширший за кадр."""
+    assert font_size_for((360, 640)) == 18
+    limit = line_chars_for((360, 640))
+    assert 24 <= limit < 42
+    subs = build_ssa(build_cues(evenly("перше друге третє")), resolution=(1080, 1920))
     assert subs.styles["Default"].fontsize == 54

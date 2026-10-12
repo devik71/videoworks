@@ -92,7 +92,10 @@ def compare(run: Run, reference: list[Token] | None) -> Comparison:
 
 def table(comparisons: list[Comparison]) -> str:
     """Проста текстова таблиця — щоб результат можна було вставити в нотатки."""
-    header = f"{'бекенд':<28}{'пристрій':<10}{'×RT':>7}{'WER':>9}{'медіана':>10}{'спікери':>10}"
+    # Ширина першої колонки — по найдовшій назві: "faster-whisper/large-v3-turbo"
+    # уже не влазить у фіксовані 28 і зливається з пристроєм.
+    name = max([len("бекенд"), *(len(item.run.label) for item in comparisons)]) + 2
+    header = f"{'бекенд':<{name}}{'пристрій':<10}{'×RT':>7}{'WER':>9}{'медіана':>10}{'спікери':>10}"
     lines = [header, "-" * len(header)]
 
     for item in comparisons:
@@ -101,7 +104,7 @@ def table(comparisons: list[Comparison]) -> str:
         speakers = f"{item.speakers:.0%}" if item.speakers is not None else "—"
         speed = f"{item.run.realtime:>6.1f}×" if item.run.warm else f"{item.run.realtime:>6.1f}~"
         lines.append(
-            f"{item.run.label:<28}{item.run.device:<10}{speed}{wer:>9}{median:>10}{speakers:>10}"
+            f"{item.run.label:<{name}}{item.run.device:<10}{speed}{wer:>9}{median:>10}{speakers:>10}"
         )
 
     if any(not item.run.warm for item in comparisons):

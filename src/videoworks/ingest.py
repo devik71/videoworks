@@ -59,11 +59,31 @@ def has_audio(probe_data: dict) -> bool:
 
 
 def resolution_of(probe_data: dict) -> tuple[int, int] | None:
-    """Розмір кадру — потрібен, щоб кегль субтитрів був відносним, а не фіксованим."""
+    """Розмір кадру таким, яким його бачить глядач.
+
+    Потрібен, щоб кегль субтитрів був відносним, а не фіксованим. Телефон пише
+    вертикальне відео як горизонтальне з позначкою повороту: у потоці 640×360,
+    на екрані 360×640. Без повороту ASS розраховувався б на ширину 640, і libass
+    переносив би кожен рядок, що не влазить у справжні 360.
+    """
     for stream in probe_data.get("streams", []):
         if stream.get("codec_type") == "video" and stream.get("width") and stream.get("height"):
-            return int(stream["width"]), int(stream["height"])
+            width, height = int(stream["width"]), int(stream["height"])
+            if _rotation(stream) % 180 == 90:
+                width, height = height, width
+            return width, height
     return None
+
+
+def _rotation(stream: dict) -> int:
+    """Поворот у градусах: новий ffprobe кладе його в side_data, старий — у теги."""
+    for item in stream.get("side_data_list") or []:
+        if "rotation" in item:
+            return round(float(item["rotation"]))
+    try:
+        return int((stream.get("tags") or {}).get("rotate", 0))
+    except ValueError:
+        return 0
 
 
 def extract_audio(video: Path, dest: Path, sample_rate: int = SAMPLE_RATE) -> Path:
