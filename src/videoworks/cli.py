@@ -7,6 +7,7 @@ import json
 import shutil
 import sys
 import webbrowser
+from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
 
@@ -14,6 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from videoworks import audio as audio_mod
 from videoworks import benchmark as benchmark_mod
 from videoworks import brief as brief_mod
 from videoworks import burn as burn_mod
@@ -368,6 +370,8 @@ def cut(
         )
     receipt.save(project.out / "cut.receipt.json")
     console.print(f"[green]Змонтовано[/] {dest}")
+    if receipt.audio:
+        _print_audio(receipt.audio)
 
     if project.transcript_raw.exists():
         remapped = edl_mod.remap_transcript(Transcript.load(project.transcript_raw), plan)
@@ -376,6 +380,92 @@ def cut(
             f"[green]Транскрипт перемаплено[/] {project.transcript_cut.name} · "
             f"{len(remapped.words())} слів лишилось"
         )
+
+
+def _loudness(reading: dict | None) -> str:
+    if not reading or reading.get("integrated") is None:
+        return "тиша"
+    peak = reading.get("true_peak")
+    peak_text = f"{peak:.1f} дБTP" if peak is not None else "—"
+    return f"{reading['integrated']:.1f} LUFS · пік {peak_text} · LRA {reading['lra']:.1f}"
+
+
+def _print_audio(data: dict) -> None:
+    """Звіт ланцюга: що заміряно на кожному кроці і яке підсилення з цього вийшло."""
+    settings = data["settings"]
+    stages = [
+        name
+        for key, name in (("compressor", "компресор"), ("deesser", "де-есер"))
+        if settings.get(key)
+    ]
+    table = Table(box=None, show_header=False, padding=(0, 2, 0, 0))
+    table.add_row("вхід", _loudness(data["source"]))
+    # На тиші підсилень немає, і рядки про них лише заплутали б.
+    if data["source"].get("integrated") is not None:
+        table.add_row(
+            "стейджгейн", f"{data['stage_gain_db']:+.1f} дБ → {settings['stage_lufs']:g} LUFS"
+        )
+        if data.get("dynamics"):
+            used = f" ({', '.join(stages)})" if stages else ""
+            table.add_row("динаміка", _loudness(data["dynamics"]) + used)
+            table.add_row(
+                "мейкап", f"{data['makeup_db']:+.1f} дБ → {settings['target_lufs']:g} LUFS"
+            )
+        if settings.get("limiter"):
+            table.add_row("лімітер", f"стеля {settings['limiter']['ceiling_db']:g} дБ")
+        if data.get("output"):
+            table.add_row("вихід", _loudness(data["output"]))
+    console.print("[bold]Звук[/]")
+    console.print(table)
+    for note in data.get("notes", []):
+        console.print(f"[yellow]{note}[/]")
+
+
+@app.command(name="audio")
+def audio_cmd(
+    project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
+) -> None:
+    """Міряє гучність і показує, що зробить ланцюг обробки звуку, — без рендеру."""
+    project = paths.resolve(project_name)
+    video = project.source_video()
+    probe_data = _probe_of(project, video)
+    if not ingest.has_audio(probe_data):
+        raise typer.BadParameter(f"У {video.name} немає звукової доріжки.")
+
+    if project.edl.exists():
+        plan = Edl.load(project.edl)
+        segments = plural(len(plan.segments), "сегмент", "сегменти", "сегментів")
+        console.print(f"[dim]за планом {project.edl.name}: {segments}[/]")
+    else:
+        # Без EDL міряємо весь файл — так видно гучність ще до монтажу.
+        plan = edl_mod.from_spans(str(video), [(0.0, ingest.duration_of(probe_data))])
+        console.print("[dim]edl.json немає — міряю весь файл[/]")
+
+    problems = audio_mod.validate(plan.audio)
+    for problem in problems:
+        colour = "red" if problem.level == "error" else "yellow"
+        console.print(f"[{colour}]{problem}[/]")
+    if edl_mod.errors(problems):
+        raise typer.Exit(code=1)
+
+    if not plan.audio.normalize:
+        reading = audio_mod.measure(video, plan)
+        console.print(f"вхід  {_loudness(asdict(reading))}")
+        console.print("[dim]audio.normalize = null — звук піде без обробки[/]")
+        return
+
+    with console.status("Міряю гучність…"):
+        chain_plan = audio_mod.plan(video, plan)
+        report = chain_plan.as_dict()
+        report["output"] = asdict(
+            audio_mod.measure(video, plan, chain_plan.graph(dest="[pre]"))
+        )
+    _print_audio(report)
+
+    cut_path = project.out / "cut.mp4"
+    if cut_path.exists():
+        current = asdict(audio_mod.measure_file(cut_path))
+        console.print(f"[dim]{cut_path.name} зараз: {_loudness(current)}[/]")
 
 
 @app.command()

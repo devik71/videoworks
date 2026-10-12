@@ -136,9 +136,46 @@ class EdlSegment(BaseModel):
         return self
 
 
+class Compressor(BaseModel):
+    """Пороги — після стейджгейну, тож однаково працюють на тихому й гучному джерелі."""
+
+    threshold_db: float = -18.0
+    ratio: float = 3.0
+    attack_ms: float = 10.0
+    release_ms: float = 150.0
+
+
+class Deesser(BaseModel):
+    """Стискає тільки смугу вище ``frequency_hz``: решта сигналу не пригинається на «с»."""
+
+    frequency_hz: float = 5000.0
+    threshold_db: float = -30.0
+    ratio: float = 4.0
+    attack_ms: float = 1.0
+    release_ms: float = 60.0
+
+
+class Limiter(BaseModel):
+    """Стеля в dBFS з 4× оверсемплом — тримає й true peak, а не лише семпловий."""
+
+    ceiling_db: float = -1.5
+    attack_ms: float = 5.0
+    release_ms: float = 50.0
+
+
 class AudioSettings(BaseModel):
+    """Ланцюг обробки звуку: стейджгейн → компресор → де-есер → мейкап → лімітер.
+
+    ``normalize=None`` вимикає обробку повністю — звук іде як є. Будь-яку стадію
+    динаміки можна вимкнути окремо, поставивши її в ``null``.
+    """
+
     normalize: str | None = "ebur128"
     target_lufs: float = -16.0
+    stage_lufs: float = -20.0
+    compressor: Compressor | None = Field(default_factory=Compressor)
+    deesser: Deesser | None = Field(default_factory=Deesser)
+    limiter: Limiter | None = Field(default_factory=Limiter)
 
 
 class Edl(BaseModel):
@@ -168,6 +205,7 @@ class Receipt(BaseModel):
     output: str
     inputs: dict[str, str] = Field(default_factory=dict)  # шлях -> sha256
     edl: dict | None = None
+    audio: dict | None = None  # заміри й обчислені підсилення ланцюга
     tools: dict[str, str] = Field(default_factory=dict)
     command: list[str] = Field(default_factory=list)
     created_at: str
