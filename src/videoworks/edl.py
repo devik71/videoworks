@@ -11,6 +11,7 @@ import math
 from fractions import Fraction
 from itertools import pairwise
 
+from videoworks import audio
 from videoworks.diagnostics import Problem, errors
 from videoworks.models import AudioSettings, Edl, EdlSegment, Segment, Transcript, Word
 from videoworks.text import join_words
@@ -189,10 +190,7 @@ def preflight(edl: Edl, *, source_duration: float | None = None, min_frame: floa
                 )
             )
 
-    if edl.audio.normalize and not -70.0 <= edl.audio.target_lufs <= -5.0:
-        problems.append(
-            Problem("error", f"target_lufs {edl.audio.target_lufs} поза розумними межами")
-        )
+    problems.extend(audio.validate(edl.audio))
 
     if edl.duration <= 0:
         problems.append(Problem("error", "сумарна тривалість нульова"))

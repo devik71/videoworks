@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from videoworks import __version__
+from videoworks import __version__, audio
+from videoworks.audio import AudioPlan
 from videoworks.edl import PreflightFailed, errors, preflight
 from videoworks.ingest import _binary, _run, ffmpeg_version
 from videoworks.models import Edl, Receipt
 
 
-def build_filtergraph(edl: Edl, *, with_audio: bool = True) -> str:
-    """trim/atrim по кожному інтервалу + concat.
+def build_filtergraph(
+    edl: Edl, *, with_audio: bool = True, audio_plan: AudioPlan | None = None
+) -> str:
+    """trim/atrim по кожному інтервалу + concat, далі ланцюг обробки звуку.
 
     Саме trim, а не seek: сегменти ріжуться покадрово від декодованого потоку,
-    тож межі точні й не з'їжджають до найближчого ключового кадру.
+    тож межі точні й не з'їжджають до найближчого ключового кадру. Без
+    ``audio_plan`` звук іде як є.
     """
     parts: list[str] = []
     labels: list[str] = []
@@ -34,10 +39,8 @@ def build_filtergraph(edl: Edl, *, with_audio: bool = True) -> str:
         order = "".join(f"[v{i}][a{i}]" for i in range(count))
         parts.append(f"{order}concat=n={count}:v=1:a=1[cv][ca]")
         parts.append("[cv]null[outv]")
-        tail = "[ca]"
-        if edl.audio.normalize == "ebur128":
-            tail = f"[ca]loudnorm=I={edl.audio.target_lufs}:TP=-1.5:LRA=11"
-            parts.append(f"{tail}[outa]")
+        if audio_plan:
+            parts.extend(audio_plan.graph("[ca]", "[outa]"))
         else:
             parts.append("[ca]anull[outa]")
     else:
@@ -63,9 +66,12 @@ def cut(
     if errors(problems):
         raise PreflightFailed(problems)
 
+    audio_plan = audio.plan(video, edl) if with_audio and edl.audio.normalize else None
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     graph_path = dest.with_suffix(".filtergraph.txt")
-    graph_path.write_text(build_filtergraph(edl, with_audio=with_audio), encoding="utf-8")
+    graph = build_filtergraph(edl, with_audio=with_audio, audio_plan=audio_plan)
+    graph_path.write_text(graph, encoding="utf-8")
 
     args = [
         _binary("ffmpeg"),
@@ -86,15 +92,20 @@ def cut(
         args += ["-c:v", encoder, "-preset", preset or "medium", "-crf", str(quality)]
     args += ["-pix_fmt", "yuv420p"]
     if with_audio:
-        args += ["-c:a", "aac", "-b:a", "192k"]
+        args += ["-c:a", "aac", "-b:a", "192k", "-ar", str(audio.SAMPLE_RATE)]
     args.append(str(dest.resolve()))
 
     _run(args)
+
+    loudness = None
+    if audio_plan:
+        loudness = audio_plan.as_dict() | {"output": asdict(audio.measure_file(dest))}
 
     receipt = Receipt(
         output=str(dest),
         inputs={str(video): sha256(video)},
         edl=edl.model_dump(),
+        audio=loudness,
         tools={
             "videoworks": __version__,
             "ffmpeg": ffmpeg_version(),

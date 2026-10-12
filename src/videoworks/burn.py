@@ -54,17 +54,28 @@ def mux_soft(video: Path, subtitles: Path, dest: Path, *, language: str = "uk") 
     dest.parent.mkdir(parents=True, exist_ok=True)
     codec = "ass" if subtitles.suffix.lower() == ".ass" else "srt"
 
-    _run([
-        _binary("ffmpeg"),
-        "-nostdin",
-        "-y",
-        "-i", str(video.resolve()),
-        "-i", str(subtitles.resolve()),
-        "-map", "0",
-        "-map", "1",
-        "-c", "copy",
-        "-c:s", codec,
-        "-metadata:s:s:0", f"language={_LANG3.get(language, language)}",
-        str(dest.resolve()),
-    ])
+    # Лише відео й звук, а не `-map 0`: телефони пишуть у MP4 службові
+    # data-потоки (таймкод, метадані камери), а Matroska їх не приймає й
+    # падає на заголовку. Чужі субтитри з джерела теж не беремо — інакше наш
+    # трек був би не першим, і мітка мови лягла б на чужий.
+    try:
+        _run([
+            _binary("ffmpeg"),
+            "-nostdin",
+            "-y",
+            "-i", str(video.resolve()),
+            "-i", str(subtitles.resolve()),
+            "-map", "0:v",
+            "-map", "0:a?",
+            "-map", "1",
+            "-c", "copy",
+            "-c:s", codec,
+            "-metadata:s:s:0", f"language={_LANG3.get(language, language)}",
+            str(dest.resolve()),
+        ])
+    except RuntimeError:
+        # ffmpeg встигає створити порожній контейнер, перш ніж упасти, і
+        # наступний крок узяв би ці кількасот байтів за готовий файл.
+        dest.unlink(missing_ok=True)
+        raise
     return dest

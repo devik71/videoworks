@@ -118,3 +118,10 @@ def test_table_marks_cold_runs() -> None:
 def test_table_stays_clean_for_warm_runs() -> None:
     warm = measure(FakeBackend(build("один")), Path("a.wav"), label="warm", audio_seconds=1.0)
     assert "не вміє прогрітись" not in table([compare(warm, None)])
+
+
+def test_table_keeps_long_names_apart_from_device() -> None:
+    label = "faster-whisper/large-v3-turbo"
+    run = measure(FakeBackend(build("один")), Path("a.wav"), label=label, audio_seconds=1.0)
+    row = table([compare(run, None)]).splitlines()[2]
+    assert row.startswith(label + " ")
