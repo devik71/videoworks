@@ -110,6 +110,54 @@ def parse_range(header: str | None, size: int) -> tuple[int, int] | None:
 # --------------------------------------------------------------------------- #
 
 
+def send_video(handler: BaseHTTPRequestHandler, video: Path, *, body: bool = True) -> None:
+    """Віддає відео шматками з підтримкою `Range`.
+
+    Живе окремо від обробника, бо тим самим кодом користується і редактор:
+    сторінок дві, а спосіб віддати той самий файл має лишатись один.
+    """
+    size = video.stat().st_size
+    mime = mimetypes.guess_type(video.name)[0] or "video/mp4"
+
+    try:
+        span = parse_range(handler.headers.get("Range"), size)
+    except ValueError:
+        handler.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+        handler.send_header("Content-Range", f"bytes */{size}")
+        handler.send_header("Content-Length", "0")
+        handler.end_headers()
+        return
+
+    start, stop = span or (0, size - 1)
+    length = stop - start + 1
+
+    handler.send_response(HTTPStatus.PARTIAL_CONTENT if span else HTTPStatus.OK)
+    handler.send_header("Content-Type", mime)
+    handler.send_header("Content-Length", str(length))
+    handler.send_header("Accept-Ranges", "bytes")
+    if span:
+        handler.send_header("Content-Range", f"bytes {start}-{stop}/{size}")
+    handler.end_headers()
+
+    if not body:
+        return
+
+    with video.open("rb") as stream:
+        stream.seek(start)
+        left = length
+        while left > 0:
+            block = stream.read(min(CHUNK, left))
+            if not block:
+                break
+            # Плеєр обриває зʼєднання на кожній перемотці — це нормальний
+            # хід подій, а не збій, тож і трейсбека тут бути не повинно.
+            try:
+                handler.wfile.write(block)
+            except (BrokenPipeError, ConnectionResetError):
+                return
+            left -= len(block)
+
+
 class _Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -153,46 +201,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _send_video(self, *, body: bool = True) -> None:
-        size = self._video.stat().st_size
-        mime = mimetypes.guess_type(self._video.name)[0] or "video/mp4"
-
-        try:
-            span = parse_range(self.headers.get("Range"), size)
-        except ValueError:
-            self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-            self.send_header("Content-Range", f"bytes */{size}")
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-
-        start, stop = span or (0, size - 1)
-        length = stop - start + 1
-
-        self.send_response(HTTPStatus.PARTIAL_CONTENT if span else HTTPStatus.OK)
-        self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(length))
-        self.send_header("Accept-Ranges", "bytes")
-        if span:
-            self.send_header("Content-Range", f"bytes {start}-{stop}/{size}")
-        self.end_headers()
-
-        if not body:
-            return
-
-        with self._video.open("rb") as stream:
-            stream.seek(start)
-            left = length
-            while left > 0:
-                block = stream.read(min(CHUNK, left))
-                if not block:
-                    break
-                # Плеєр обриває зʼєднання на кожній перемотці — це нормальний
-                # хід подій, а не збій, тож і трейсбека тут бути не повинно.
-                try:
-                    self.wfile.write(block)
-                except (BrokenPipeError, ConnectionResetError):
-                    return
-                left -= len(block)
+        send_video(self, self._video, body=body)
 
 
 # --------------------------------------------------------------------------- #
@@ -389,7 +398,7 @@ def _escape(value: str) -> str:
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-class _Server(ThreadingHTTPServer):
+class Server(ThreadingHTTPServer):
     def handle_error(self, request: object, client_address: object) -> None:
         """Обрив зʼєднання — не збій, і трейсбека він не вартий.
 
@@ -408,7 +417,7 @@ def build_server(
     load: Callable[[], dict],
     title: str,
     port: int = 8770,
-) -> _Server:
+) -> Server:
     """Піднімає сервер на 127.0.0.1. Порт 0 — вибрати вільний самому."""
     handler = partial(_Handler, page=page(title), load=load, video=video)
-    return _Server(("127.0.0.1", port), handler)
+    return Server(("127.0.0.1", port), handler)

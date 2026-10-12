@@ -69,8 +69,8 @@ def test_payload_is_json_serialisable() -> None:
 
 
 def test_payload_counts_levels() -> None:
-    fast = cue("Репліка, яку ніхто не встигне прочитати за секунду", 0.0, 1.0)
-    data = payload(analyze_cues([cue(""), fast, cue("Норм.")]))
+    fast = cue("Репліка, яку ніхто не встигне прочитати за секунду", 4.0, 5.0)
+    data = payload(analyze_cues([cue(""), fast, cue("Норм.", 6.0, 9.0)]))
     assert (data["errors"], data["warnings"]) == (1, 1)
     assert [c["level"] for c in data["cues"]] == ["error", "warning", "ok"]
 

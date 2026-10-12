@@ -25,6 +25,7 @@ from videoworks import (
     paths,
     preview,
     render,
+    studio,
     subtitles,
     translate,
 )
@@ -730,6 +731,31 @@ def edit(
             console.print(f"[yellow]{sibling.name} лишився старим — перезбери subtitle.[/]")
 
 
+def _open_subs(project: paths.Project, lang: str | None) -> tuple[str, Path, Path]:
+    """Мова, файл субтитрів і відео, до якого він належить."""
+    code = lang or _default_lang(project)
+    path = project.subs / f"{code}.srt"
+    if not path.exists():
+        raise typer.BadParameter(f"Немає {path}. Спочатку subtitle.")
+    return code, path, _subtitled_video(project)
+
+
+def _serve(server, *, label: str, what: str, open_browser: bool) -> None:
+    """Крутить сервер до Ctrl+C. Спільне для переглядача й редактора."""
+    url = f"http://127.0.0.1:{server.server_port}/"
+    console.print(f"[green]{label}[/] {url}")
+    console.print(f"[dim]{what} · Ctrl+C щоб спинити[/]")
+    if open_browser:
+        webbrowser.open(url)
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        console.print("\n[dim]Спинено[/]")
+    finally:
+        server.server_close()
+
+
 @app.command(name="preview")
 def preview_cmd(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
@@ -742,12 +768,7 @@ def preview_cmd(
 ) -> None:
     """Піднімає локальний переглядач: відео, підпис у кадрі й список реплік."""
     project = paths.resolve(project_name)
-    code = lang or _default_lang(project)
-    path = project.subs / f"{code}.srt"
-    if not path.exists():
-        raise typer.BadParameter(f"Немає {path}. Спочатку subtitle.")
-
-    video = _subtitled_video(project)
+    _, path, video = _open_subs(project, lang)
     opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
 
     # Читаємо файл на кожен запит, а не раз при старті: кнопка «перечитати»
@@ -762,18 +783,78 @@ def preview_cmd(
     except OSError as exc:
         raise typer.BadParameter(f"Порт {port} зайнятий ({exc}). Візьми інший або --port 0.") from exc
 
-    url = f"http://127.0.0.1:{server.server_port}/"
-    console.print(f"[green]Переглядач[/] {url}")
-    console.print(f"[dim]{video.name} + {path.name} · Ctrl+C щоб спинити[/]")
-    if open_browser:
-        webbrowser.open(url)
+    _serve(
+        server,
+        label="Переглядач",
+        what=f"{video.name} + {path.name}",
+        open_browser=open_browser,
+    )
+
+
+@app.command(name="studio")
+def studio_cmd(
+    project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
+    lang: Annotated[str | None, typer.Option(help="Мова субтитрів")] = None,
+    max_line: Annotated[int, typer.Option(help="Максимум символів у рядку")] = 42,
+    max_lines: Annotated[int, typer.Option(help="Максимум рядків у репліці")] = 2,
+    cps: Annotated[float, typer.Option(help="Стеля швидкості читання")] = 17.0,
+    port: Annotated[int, typer.Option(help="Порт; 0 — вибрати вільний")] = 8771,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Відкрити браузер")] = True,
+) -> None:
+    """Піднімає візуальний редактор: правка тексту й таймкодів поверх кадру."""
+    project = paths.resolve(project_name)
+    code, path, video = _open_subs(project, lang)
+    opts = subtitles.CueOptions(max_line_chars=max_line, max_lines=max_lines, max_cps=cps)
+
+    def store(cues: list[subtitles.Cue], force: bool) -> dict:
+        subtitles.save(cues, path)
+        # Перезаписуємо лише .srt: у .ass лежить оформлення, зібране в subtitle
+        # разом зі шрифтом і роздільністю, і сліпий перезапис його б знеособив.
+        stale = [
+            sibling.name
+            for suffix in ("ass", "vtt")
+            if (sibling := project.subs / f"{code}.{suffix}").exists()
+        ]
+        counted = plural(len(cues), "репліка", "репліки", "реплік")
+        console.print(
+            f"[green]Записано[/] {path.name} · {counted}" + (" (--force)" if force else "")
+        )
+        for name in stale:
+            console.print(f"[yellow]{name} лишився старим — перезбери subtitle.[/]")
+        return {"path": str(path), "stale": stale}
+
+    def fingerprint() -> str:
+        """Відбиток файлу — за ним видно, що його перезібрали під редактором.
+
+        Розмір разом із часом правки: одного часу мало, бо `subtitle` може
+        перезаписати файл у ту саму мілісекунду, в яку його прочитали.
+        """
+        if not path.exists():
+            return ""
+        info = path.stat()
+        return f"{info.st_mtime_ns}:{info.st_size}"
 
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        console.print("\n[dim]Спинено[/]")
-    finally:
-        server.server_close()
+        server = studio.build_server(
+            video=video,
+            load=lambda: subtitles.load_cues(path),
+            store=store,
+            opts=opts,
+            title=f"{project.root.name} · {path.name}",
+            port=port,
+            stamp=fingerprint,
+        )
+    except OSError as exc:
+        raise typer.BadParameter(
+            f"Порт {port} зайнятий ({exc}). Візьми інший або --port 0."
+        ) from exc
+
+    _serve(
+        server,
+        label="Редактор",
+        what=f"{video.name} + {path.name} · правки пишуться в {path.name}",
+        open_browser=open_browser,
+    )
 
 
 @app.command()

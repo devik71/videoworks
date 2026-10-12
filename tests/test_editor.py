@@ -22,6 +22,26 @@ def test_analyze_counts_characters_and_speed() -> None:
     assert report.fits
 
 
+def test_analyze_detects_overlap_with_the_previous_cue() -> None:
+    # Дві репліки на екрані одночасно плеєр покаже одну поверх одної.
+    report = analyze_cues([cue("Перша", 0.0, 3.0), cue("Друга", 2.0, 5.0)])[1]
+    assert any("перекриває репліку 1" in p.message for p in report.problems)
+    assert all(p.level == "error" for p in report.problems)
+
+
+def test_analyze_lets_cues_touch_without_complaining() -> None:
+    # Мілісекундні таймкоди SRT після ділення на 1000 не збігаються точно.
+    reports = analyze_cues([cue("Перша", 0.0, 3.0), cue("Друга", 2.9999, 6.0)])
+    assert all(not r.problems for r in reports)
+
+
+def test_analyze_tells_reversed_bounds_from_zero_length() -> None:
+    reversed_bounds = analyze_cues([cue("Текст", 5.0, 1.0)])[0]
+    empty_span = analyze_cues([cue("Текст", 5.0, 5.0)])[0]
+    assert any("кінець раніше за початок" in p.message for p in reversed_bounds.problems)
+    assert any("нульова тривалість" in p.message for p in empty_span.problems)
+
+
 def test_analyze_detects_empty_cue() -> None:
     report = analyze_cues([cue("")])[0]
     assert any("порожня" in p.message for p in report.problems)
@@ -100,7 +120,7 @@ def test_trim_handles_empty_cue() -> None:
 
 
 def test_format_report_contains_stats() -> None:
-    output = format_report(analyze_cues([cue("Тест"), cue("")]))
+    output = format_report(analyze_cues([cue("Тест"), cue("", 4.0, 7.0)]))
     assert "Реплік: 2" in output
     assert "помилок: 1" in output
     assert "попереджень: 0" in output
@@ -113,15 +133,15 @@ def test_format_report_shows_text_and_problems() -> None:
 
 
 def test_format_report_marks_severity() -> None:
-    fast = cue("Репліка, яку ніхто не встигне прочитати за секунду", 0.0, 1.0)
-    output = format_report(analyze_cues([cue(""), fast, cue("Норм.")]))
+    fast = cue("Репліка, яку ніхто не встигне прочитати за секунду", 4.0, 5.0)
+    output = format_report(analyze_cues([cue(""), fast, cue("Норм.", 6.0, 9.0)]))
     marks = [line[0] for line in output.splitlines() if line[:1] and line[0] in "x!·"]
     assert marks == ["x", "!", "·"]
 
 
 def test_format_report_counts_whole_file_when_filtering() -> None:
-    fast = cue("Репліка, яку ніхто не встигне прочитати за секунду", 0.0, 1.0)
-    reports = analyze_cues([cue("Норм."), fast, cue("Теж норм.")])
+    fast = cue("Репліка, яку ніхто не встигне прочитати за секунду", 4.0, 5.0)
+    reports = analyze_cues([cue("Норм."), fast, cue("Теж норм.", 6.0, 9.0)])
     output = format_report(reports, only_problems=True)
     assert "Реплік: 3" in output
     assert "попереджень: 1" in output

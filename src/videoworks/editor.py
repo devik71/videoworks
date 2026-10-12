@@ -16,6 +16,11 @@ from dataclasses import dataclass
 from videoworks.diagnostics import Problem
 from videoworks.subtitles import Cue, CueOptions, fits_lines, wrap_lines
 
+# Таймкоди SRT живуть у мілісекундах, і після ділення на 1000 сусідні межі
+# зрідка розходяться на останній двійковий розряд. Півмілісекунди — менше за
+# те, що взагалі можна показати, тож дотик тут не рахується перекриттям.
+_TOUCHING = 5e-4
+
 
 @dataclass(frozen=True)
 class CueReport:
@@ -49,6 +54,19 @@ def analyze_cues(cues: list[Cue], opts: CueOptions | None = None) -> list[CueRep
         fits = fits_lines(text, opts)
         problems: list[Problem] = []
 
+        # Дві репліки на екрані одночасно — не вільність, а збій: плеєр або
+        # накладе їх одна на одну, або покаже випадкову. Перевірці потрібен
+        # сусід, тому вона тут, а не поруч із рештою — ті дивляться на одну.
+        if index > 1:
+            before = cues[index - 2]
+            if cue.start < before.end - _TOUCHING:
+                problems.append(
+                    Problem(
+                        "error",
+                        f"перекриває репліку {index - 1} на {before.end - cue.start:.2f} с",
+                    )
+                )
+
         if not text.strip():
             problems.append(Problem("error", "порожня репліка"))
         elif not fits:
@@ -64,7 +82,11 @@ def analyze_cues(cues: list[Cue], opts: CueOptions | None = None) -> list[CueRep
 
         # Нульова тривалість робить безглуздими і швидкість читання (вона
         # нескінченна), і мінімум на екрані — тому це окрема гілка.
-        if cue.duration <= 0:
+        if cue.duration < 0:
+            # Вивернуті межі й нульова тривалість ламають однаково, але
+            # лікуються по-різному: тут треба поміняти кінець із початком.
+            problems.append(Problem("error", "кінець раніше за початок"))
+        elif cue.duration == 0:
             problems.append(Problem("error", "нульова тривалість — не зʼявиться на екрані"))
         else:
             if cue.cps > opts.max_cps:
