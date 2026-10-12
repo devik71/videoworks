@@ -343,77 +343,93 @@ _PAGE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
+<link rel="icon" href="data:,">
 <style>
-  /* Палітра системна: ті самі значення, що в елементах керування macOS та iOS.
-     Темна — основна (з відео працюють у темряві), світла переозначає токени. */
+  /* Темна тема — основна: з відео працюють у темряві, і світлий інтерфейс
+     навколо кадру збиває око з кольору. Світла лише переозначає токени. */
   :root {
-    --ground: #1c1c1e;
-    --surface: #2c2c2e;
-    --raised: #3a3a3c;
-    --hair: rgba(255, 255, 255, .11);
-    --fill: rgba(120, 120, 128, .28);
-    --fill-hi: rgba(120, 120, 128, .44);
-    --ink: #f5f5f7;
-    --dim: #98989d;
-    --faint: #636366;
-    --blue: #0a84ff;
-    --blue-soft: rgba(10, 132, 255, .18);
-    --red: #ff453a;
-    --orange: #ff9f0a;
-    --green: #30d158;
-    --shade: rgba(0, 0, 0, .55);
-    --glass: rgba(28, 28, 30, .72);
+    --ground: #111113;
+    --panel: #18181b;
+    --surface: #1f1f23;
+    --raised: #2a2a2f;
+    --ruler: #141416;
+    --hair: rgba(255, 255, 255, .07);
+    --line: rgba(255, 255, 255, .12);
+    --fill: rgba(255, 255, 255, .06);
+    --fill-hi: rgba(255, 255, 255, .11);
+    --ink: #ededef;
+    --dim: #a0a0a8;
+    --faint: #66666e;
+    --blue: #4c8dff;
+    --blue-soft: rgba(76, 141, 255, .16);
+    --clip: #2b3a55;
+    --clip-edge: #5b82c7;
+    --red: #ff5a52;
+    --orange: #f5a524;
+    --green: #3ecf6e;
+    --shade: rgba(0, 0, 0, .5);
+    --glass: rgba(17, 17, 19, .82);
     color-scheme: dark;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
-      --ground: #f2f2f7;
+      --ground: #e9e9ec;
+      --panel: #f6f6f8;
       --surface: #ffffff;
       --raised: #ffffff;
-      --hair: rgba(60, 60, 67, .16);
-      --fill: rgba(120, 120, 128, .16);
-      --fill-hi: rgba(120, 120, 128, .28);
-      --ink: #1c1c1e;
-      --dim: #6e6e73;
-      --faint: #aeaeb2;
-      --blue: #0071e3;
-      --blue-soft: rgba(0, 113, 227, .12);
-      --red: #d70015;
-      --orange: #b25000;
-      --green: #248a3d;
-      --shade: rgba(0, 0, 0, .12);
-      --glass: rgba(242, 242, 247, .72);
+      --ruler: #efeff2;
+      --hair: rgba(20, 20, 30, .08);
+      --line: rgba(20, 20, 30, .14);
+      --fill: rgba(20, 20, 30, .05);
+      --fill-hi: rgba(20, 20, 30, .09);
+      --ink: #18181b;
+      --dim: #5f5f68;
+      --faint: #9a9aa3;
+      --blue: #2563eb;
+      --blue-soft: rgba(37, 99, 235, .11);
+      --clip: #dbe5f8;
+      --clip-edge: #6b8fd6;
+      --red: #d92d20;
+      --orange: #b54708;
+      --green: #16803c;
+      --shade: rgba(20, 20, 30, .12);
+      --glass: rgba(246, 246, 248, .86);
       color-scheme: light;
     }
   }
   :root[data-theme="light"] {
-    --ground: #f2f2f7;
+    --ground: #e9e9ec;
+    --panel: #f6f6f8;
     --surface: #ffffff;
     --raised: #ffffff;
-    --hair: rgba(60, 60, 67, .16);
-    --fill: rgba(120, 120, 128, .16);
-    --fill-hi: rgba(120, 120, 128, .28);
-    --ink: #1c1c1e;
-    --dim: #6e6e73;
-    --faint: #aeaeb2;
-    --blue: #0071e3;
-    --blue-soft: rgba(0, 113, 227, .12);
-    --red: #d70015;
-    --orange: #b25000;
-    --green: #248a3d;
-    --shade: rgba(0, 0, 0, .12);
-    --glass: rgba(242, 242, 247, .72);
+    --ruler: #efeff2;
+    --hair: rgba(20, 20, 30, .08);
+    --line: rgba(20, 20, 30, .14);
+    --fill: rgba(20, 20, 30, .05);
+    --fill-hi: rgba(20, 20, 30, .09);
+    --ink: #18181b;
+    --dim: #5f5f68;
+    --faint: #9a9aa3;
+    --blue: #2563eb;
+    --blue-soft: rgba(37, 99, 235, .11);
+    --clip: #dbe5f8;
+    --clip-edge: #6b8fd6;
+    --red: #d92d20;
+    --orange: #b54708;
+    --green: #16803c;
+    --shade: rgba(20, 20, 30, .12);
+    --glass: rgba(246, 246, 248, .86);
     color-scheme: light;
   }
 
-  /* SF Pro Display і SF Pro Text — два оптичні накреслення одного шрифта, і
-     система підставляє їх сама. На Windows цю роль грає Segoe UI Variable. */
+  /* Системні шрифти: на macOS це SF, на Windows — Segoe UI Variable. Таймкоди
+     моноширинні з табличними цифрами, інакше вони тремтять під час гри. */
   :root {
-    --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
-          "Segoe UI", system-ui, sans-serif;
-    --display: -apple-system, BlinkMacSystemFont, "SF Pro Display",
-               "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+    --ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+          system-ui, sans-serif;
+    --display: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+               "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
   }
 
   * { box-sizing: border-box; }
@@ -422,64 +438,169 @@ _PAGE = r"""<!doctype html>
     margin: 0;
     background: var(--ground);
     color: var(--ink);
-    font: 400 13px/1.45 var(--ui);
+    font: 400 13px/1.4 var(--ui);
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
+    display: grid;
+    grid-template-rows: 48px minmax(0, 1fr) auto 26px;
   }
   .tc, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  svg { display: block; flex: 0 0 auto; }
 
   :focus-visible {
     outline: 2px solid color-mix(in srgb, var(--blue) 70%, transparent);
-    outline-offset: 2px;
+    outline-offset: 1px;
     border-radius: 6px;
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
   }
 
-  /* --- Панель інструментів ------------------------------------------- */
-
-  .toolbar {
-    display: flex; align-items: center; gap: 14px;
-    height: 52px; padding: 0 16px; flex: 0 0 auto;
-    border-bottom: 1px solid var(--hair);
-    background: var(--glass);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    position: relative; z-index: 5;
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--fill-hi); border-radius: 10px;
+    border: 3px solid transparent; background-clip: padding-box;
   }
-  .doc { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .doc b {
-    font: 600 13px/1.2 var(--display); letter-spacing: -.01em;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .doc span { color: var(--dim); font-size: 11px; }
-  .doc span.edited::after { content: " · змінено"; color: var(--orange); }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--faint); }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 
+  /* --- Кнопки ----------------------------------------------------------- */
+
+  .btn {
+    appearance: none; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 30px; padding: 0 12px; flex: 0 0 auto;
+    font: 500 12px/1 var(--ui); color: var(--ink);
+    background: var(--fill); border: 1px solid var(--hair); border-radius: 7px;
+    transition: background .12s ease, color .12s ease, border-color .12s ease;
+  }
+  .btn:hover { background: var(--fill-hi); }
+  .btn:active { transform: translateY(.5px); }
+  .btn.primary {
+    background: var(--blue); border-color: transparent; color: #fff; font-weight: 600;
+  }
+  .btn.primary:hover { background: color-mix(in srgb, var(--blue) 88%, #fff); }
+  .btn:disabled { opacity: .4; cursor: default; transform: none; }
+  .btn:disabled:hover { background: var(--fill); }
+  .btn.primary:disabled:hover { background: var(--blue); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--dim); }
+  .btn.ghost:hover { background: var(--fill-hi); color: var(--ink); }
+  .btn.icon { width: 30px; padding: 0; }
+  .btn.on { background: var(--blue-soft); border-color: transparent; color: var(--blue); }
+  .btn svg { width: 16px; height: 16px; }
+
+  .sep { width: 1px; height: 18px; background: var(--line); flex: 0 0 auto; }
   .grow { flex: 1 1 auto; }
 
-  /* Сегментований перемикач — той самий елемент, що у панелях керування. */
+  /* --- Верхня панель ---------------------------------------------------- */
+
+  .toolbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 12px 0 14px; min-width: 0;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .mark {
+    width: 24px; height: 24px; border-radius: 6px; flex: 0 0 auto;
+    display: grid; place-items: center; color: #fff;
+    background: linear-gradient(135deg, var(--blue), color-mix(in srgb, var(--blue) 55%, #8b5cf6));
+  }
+  .mark svg { width: 14px; height: 14px; }
+  .doc { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .doc b {
+    font: 600 13px/1.2 var(--display); letter-spacing: -.005em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .doc span { color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .doc span.edited { color: var(--orange); }
+  .doc span.edited::before {
+    content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px;
+    border-radius: 50%; background: var(--orange); vertical-align: 1px;
+  }
+
+  /* --- Робоча зона: кадр і список -------------------------------------- */
+
+  main {
+    display: grid; min-height: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(400px, 34%);
+  }
+
+  .viewer {
+    position: relative; min-width: 0; min-height: 0;
+    display: grid; place-items: center; padding: 16px;
+    background: var(--ground);
+    container-type: size;
+  }
+  /* Кадр вписується у вільне місце, як у переглядачі монтажки: не ширший за
+     колонку й не вищий за неї. Пропорцію сторінка бере з самого відео. */
+  .frame {
+    --ar: 1.7778;
+    position: relative; aspect-ratio: var(--ar);
+    width: min(100cqw, 100cqh * var(--ar));
+    background: #000; border-radius: 4px; overflow: hidden;
+    box-shadow: 0 0 0 1px var(--hair), 0 18px 48px var(--shade);
+    container-type: inline-size;
+  }
+  video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  /* Обвідка як у вжитих субтитрах: штрих під заливкою, а не тінь, — інакше
+     на світлому кадрі підпис у переглядачі читається краще, ніж читатиметься
+     у готовому відео. */
+  .caption {
+    position: absolute; left: 0; right: 0; bottom: 7%;
+    padding: 0 6%; text-align: center; pointer-events: none;
+    white-space: pre-line; color: #fff;
+    font-family: var(--display); font-weight: 650; line-height: 1.22;
+    font-size: 4.2cqw;
+    -webkit-text-stroke: .16em #000; paint-order: stroke fill;
+    text-shadow: 0 .06em .12em rgba(0, 0, 0, .6);
+  }
+  /* Рамка гарантованої видимості: 90% кадру. Те, що виходить за неї, на
+     частині екранів обріжеться — і саме там підпис найчастіше й лізе. */
+  .safe {
+    position: absolute; inset: 5%; pointer-events: none;
+    border: 1px dashed rgba(255, 255, 255, .4); border-radius: 2px;
+    display: none;
+  }
+  .frame.guides .safe { display: block; }
+  .nofeed {
+    position: absolute; inset: 0; display: none; place-items: center;
+    color: rgba(255, 255, 255, .45); font-size: 12px; letter-spacing: .02em;
+  }
+  .frame.empty .nofeed { display: grid; }
+
+  /* --- Список реплік ------------------------------------------------------ */
+
+  .side {
+    display: grid; grid-template-rows: auto auto minmax(0, 1fr);
+    min-width: 0; min-height: 0;
+    background: var(--panel); border-left: 1px solid var(--line);
+  }
+  .side-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 12px; border-bottom: 1px solid var(--line);
+  }
+
+  /* Сегментований перемикач. */
   .seg {
     display: flex; gap: 2px; padding: 2px; flex: 0 0 auto;
-    background: var(--fill); border-radius: 8px;
+    background: var(--fill); border: 1px solid var(--hair); border-radius: 8px;
   }
   .seg button {
     appearance: none; border: 0; cursor: pointer;
-    font: 500 12px/1 var(--ui); color: var(--ink);
-    background: transparent; border-radius: 6px; padding: 5px 11px;
-    transition: background .15s ease;
+    font: 500 12px/1 var(--ui); color: var(--dim);
+    background: transparent; border-radius: 6px; padding: 6px 11px;
+    transition: background .12s ease, color .12s ease;
   }
+  .seg button:hover { color: var(--ink); }
   .seg button[aria-selected="true"] {
-    background: var(--raised);
-    box-shadow: 0 1px 2px var(--shade);
+    background: var(--raised); color: var(--ink);
+    box-shadow: 0 1px 2px var(--shade), 0 0 0 1px var(--hair);
   }
 
-  .tally { display: flex; gap: 6px; flex: 0 0 auto; }
+  .tally { display: flex; gap: 4px; flex: 0 0 auto; margin-left: auto; }
   .pill {
     display: inline-flex; align-items: center; gap: 5px;
-    padding: 3px 9px; border-radius: 999px;
-    background: var(--fill); color: var(--dim);
-    font-size: 11px; font-variant-numeric: tabular-nums;
+    height: 24px; padding: 0 8px; border-radius: 6px;
+    color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums;
   }
   .pill b { color: var(--ink); font-weight: 600; }
   .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
@@ -489,302 +610,362 @@ _PAGE = r"""<!doctype html>
   .pill.warn b { color: var(--orange); }
   .pill.zero { opacity: .45; }
 
-  .btn {
-    appearance: none; cursor: pointer;
-    font: 500 12px/1 var(--ui); color: var(--ink);
-    background: var(--fill); border: 0; border-radius: 8px;
-    padding: 7px 13px; flex: 0 0 auto;
-    transition: background .15s ease, opacity .15s ease;
+  /* Заголовки колонок — та сама сітка, що в рядках, щоб стояти над ними. */
+  .cols, .row { display: grid; grid-template-columns: 3px 28px 78px minmax(0, 1fr) 60px; gap: 0 10px; }
+  .cols {
+    padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line);
+    color: var(--faint); font-size: 10px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase;
   }
-  .btn:hover { background: var(--fill-hi); }
-  .btn.primary { background: var(--blue); color: #fff; font-weight: 600; }
-  .btn.primary:hover { filter: brightness(1.08); }
-  .btn:disabled { opacity: .38; cursor: default; }
-  .btn:disabled:hover { background: var(--fill); filter: none; }
-  .btn.icon { padding: 7px 9px; font-family: var(--mono); }
-  .btn.on { background: var(--blue-soft); color: var(--blue); }
+  .cols span:nth-child(2), .cols span:last-child { text-align: right; }
+  .cols span:nth-child(3) { padding-left: 6px; }
 
-  /* --- Розкладка ------------------------------------------------------ */
+  .cues { overflow-y: auto; overscroll-behavior: contain; min-width: 0; }
 
-  main {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
-    height: calc(100% - 52px);
+  .row {
+    position: relative; align-items: start;
+    padding: 9px 12px 9px 0; border-bottom: 1px solid var(--hair);
+    cursor: default; scroll-margin: 8px;
   }
-  .canvas {
-    display: flex; flex-direction: column; gap: 12px;
-    padding: 14px 14px 0; min-width: 0; min-height: 0;
+  .row:hover { background: var(--fill); }
+  .row.on { background: var(--blue-soft); }
+  .row.on::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 45%, transparent);
   }
-  .cues {
-    border-left: 1px solid var(--hair);
-    overflow-y: auto; overscroll-behavior: contain;
-    min-width: 0;
+  .stripe { align-self: stretch; margin: -9px 0; background: transparent; }
+  .row.warning .stripe { background: var(--orange); }
+  .row.error .stripe { background: var(--red); }
+  .row > .num { color: var(--faint); font-size: 11px; text-align: right; padding-top: 6px; }
+  .row.on > .num { color: var(--blue); }
+
+  .times { display: flex; flex-direction: column; gap: 2px; }
+  .times input {
+    width: 100%; height: 22px; padding: 0 5px;
+    font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums;
+    color: var(--ink); background: transparent;
+    border: 1px solid transparent; border-radius: 5px;
   }
-  @media (max-width: 980px) {
-    body { overflow: auto; }
-    main { grid-template-columns: 1fr; height: auto; }
-    .cues { border-left: 0; border-top: 1px solid var(--hair); }
+  .times input + input { color: var(--dim); }
+  .times input:hover { background: var(--fill); }
+  .times input:focus {
+    background: var(--surface); color: var(--ink); border-color: var(--blue); outline: none;
+  }
+  .times .dur { color: var(--faint); font-size: 10px; font-family: var(--mono); padding: 1px 6px 0; }
+
+  .body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .row textarea {
+    display: block; width: 100%; resize: none; overflow: hidden;
+    font: 400 13px/1.42 var(--ui); color: var(--ink);
+    background: transparent; border: 1px solid transparent; border-radius: 6px;
+    padding: 3px 6px; margin: 0 -7px; width: calc(100% + 14px);
+  }
+  .row textarea:hover { background: var(--fill); }
+  .row textarea:focus {
+    background: var(--surface); border-color: var(--blue); outline: none;
+    box-shadow: 0 0 0 3px var(--blue-soft);
   }
 
-  /* --- Кадр ----------------------------------------------------------- */
+  .why { display: flex; flex-direction: column; gap: 2px; font-size: 11px; line-height: 1.35; }
+  .why:empty { display: none; }
+  .why .warning { color: var(--orange); }
+  .why .error { color: var(--red); }
 
-  .frame {
-    position: relative; container-type: inline-size;
-    background: #000; border-radius: 12px; overflow: hidden;
-    box-shadow: 0 1px 3px var(--shade), 0 12px 32px var(--shade);
-    flex: 0 1 auto; min-height: 0;
+  /* Метрики праворуч: швидкість — головна, бо саме вона найчастіше ламає
+     репліку; символи й рядки — довідково під нею. */
+  .meters {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+    padding-top: 4px; color: var(--faint); font-size: 10px;
   }
-  video { display: block; width: 100%; max-height: 52vh; background: #000; }
-  .caption {
-    position: absolute; left: 0; right: 0; bottom: 7%;
-    text-align: center; padding: 0 6%; pointer-events: none;
-    white-space: pre-line; color: #fff;
-    font-family: var(--display); font-weight: 700; line-height: 1.24;
-    font-size: clamp(13px, 2.2vw, 26px);
-    font-size: 4.6cqw;
-    text-shadow: 0 0 4px #000, 0 0 4px #000, 0 2px 3px rgba(0, 0, 0, .9);
-  }
-  /* Рамка гарантованої видимості: 90% кадру. Те, що виходить за неї, на
-     частині екранів обріжеться — і саме там підпис найчастіше й лізе. */
-  .safe {
-    position: absolute; inset: 5%; pointer-events: none;
-    border: 1px dashed rgba(255, 255, 255, .34); border-radius: 3px;
-    display: none;
-  }
-  .frame.guides .safe { display: block; }
+  .meters .cps { font-size: 12px; color: var(--dim); }
+  .meters .over { color: var(--red); }
+  .meters .near { color: var(--orange); }
+  .bar { width: 100%; height: 3px; border-radius: 2px; background: var(--fill-hi); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--green); border-radius: 2px; }
+  .bar i.near { background: var(--orange); }
+  .bar i.over { background: var(--red); }
 
-  /* --- Транспорт ------------------------------------------------------ */
+  .acts {
+    position: absolute; bottom: 6px; right: 8px; z-index: 1;
+    display: flex; gap: 1px; padding: 2px;
+    background: var(--raised); border: 1px solid var(--line); border-radius: 7px;
+    box-shadow: 0 4px 14px var(--shade);
+    opacity: 0; pointer-events: none; transition: opacity .1s ease;
+  }
+  .row:hover .acts, .acts:focus-within { opacity: 1; pointer-events: auto; }
+  .acts button {
+    appearance: none; border: 0; cursor: pointer; border-radius: 5px;
+    display: grid; place-items: center; width: 24px; height: 22px;
+    background: transparent; color: var(--dim);
+  }
+  .acts button svg { width: 14px; height: 14px; }
+  .acts button:hover { background: var(--fill-hi); color: var(--ink); }
+  .acts button.danger:hover { background: color-mix(in srgb, var(--red) 20%, transparent); color: var(--red); }
 
+  .blank { padding: 40px 20px; color: var(--dim); text-align: center; }
+
+  /* --- Таймлайн ---------------------------------------------------------- */
+
+  .timeline {
+    display: flex; flex-direction: column; min-width: 0;
+    background: var(--panel); border-top: 1px solid var(--line);
+  }
   .transport {
-    display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 6px 10px; border-bottom: 1px solid var(--hair);
   }
-  .transport .tc { font-size: 12px; }
-  .transport .tc.of { color: var(--dim); }
+  .transport .btn.play { width: 34px; }
+  .transport .play .i-pause, .transport .play.playing .i-play { display: none; }
+  .transport .play.playing .i-pause { display: block; }
+  .clock {
+    display: flex; align-items: baseline; gap: 6px; padding: 0 8px; min-width: 150px;
+  }
+  .clock .tc { font-size: 15px; font-weight: 500; letter-spacing: -.01em; }
+  .clock .tc.of { font-size: 11px; color: var(--faint); font-weight: 400; }
   .switch {
-    display: inline-flex; align-items: center; gap: 6px;
-    color: var(--dim); font-size: 12px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 6px;
+    color: var(--dim); font-size: 12px; cursor: pointer; user-select: none;
   }
   .switch input { accent-color: var(--blue); margin: 0; }
   .switch:hover { color: var(--ink); }
 
-  /* --- Стрічка реплік -------------------------------------------------- */
-
   .ribbon {
-    flex: 0 0 auto; height: 102px; position: relative;
-    background: var(--surface); border: 1px solid var(--hair); border-radius: 12px;
+    position: relative; height: 112px;
     overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+    background: var(--ground);
   }
-  .track { position: relative; height: 100%; min-width: 100%; cursor: text; }
-  /* Смуга лінійки вгорі: підписи стоять у ній, а не поверх блоків. */
+  .track {
+    position: relative; height: 100%; min-width: 100%; cursor: text;
+    background: linear-gradient(var(--ruler) 0 24px, transparent 24px);
+  }
+  /* Межа лінійки: підписи стоять над нею, блоки — під нею. */
   .track::before {
-    content: ""; position: absolute; left: 0; right: 0; top: 21px;
-    border-top: 1px solid var(--hair); pointer-events: none;
+    content: ""; position: absolute; left: 0; right: 0; top: 24px;
+    border-top: 1px solid var(--line); pointer-events: none;
   }
-  .tick { position: absolute; top: 14px; bottom: 0; border-left: 1px solid var(--hair); }
-  .tick.lead { top: 0; border-left-color: var(--fill-hi); }
+  .tick { position: absolute; top: 18px; height: 6px; border-left: 1px solid var(--line); pointer-events: none; }
+  .tick.lead { top: 10px; bottom: 0; height: auto; border-left-color: var(--hair); }
+  .tick.lead::before {
+    content: ""; position: absolute; top: 0; left: -1px; height: 14px;
+    border-left: 1px solid var(--faint);
+  }
   .tick span {
-    position: absolute; top: 3px; left: 5px;
+    position: absolute; top: -6px; left: 5px;
     font-family: var(--mono); font-size: 10px; color: var(--faint);
-    font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
   }
+
   .blk {
-    position: absolute; top: 30px; height: 56px; min-width: 3px;
-    border-radius: 6px; overflow: hidden; cursor: grab;
-    background: var(--fill); border: 1px solid var(--hair);
-    padding: 4px 6px; font-size: 10px; line-height: 1.25; color: var(--ink);
-    transition: box-shadow .12s ease;
+    position: absolute; top: 34px; height: 66px; min-width: 3px;
+    border-radius: 5px; overflow: hidden; cursor: grab;
+    background: var(--clip);
+    border: 1px solid color-mix(in srgb, var(--clip-edge) 55%, transparent);
+    border-left: 2px solid var(--clip-edge);
+    padding: 5px 7px; color: var(--ink);
+    font-size: 11px; line-height: 1.3;
+    transition: box-shadow .12s ease, filter .12s ease;
   }
+  .blk span {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+    overflow: hidden; pointer-events: none; overflow-wrap: anywhere;
+  }
+  .blk:hover { filter: brightness(1.12); }
   .blk:active { cursor: grabbing; }
-  .blk.warning { background: color-mix(in srgb, var(--orange) 22%, transparent); }
-  .blk.error { background: color-mix(in srgb, var(--red) 24%, transparent); }
-  .blk.on { box-shadow: 0 0 0 2px var(--blue); z-index: 2; }
+  .blk.thin { padding: 0; }
+  .blk.thin span { display: none; }
+  .blk.warning {
+    background: color-mix(in srgb, var(--orange) 24%, var(--surface));
+    border-color: color-mix(in srgb, var(--orange) 50%, transparent);
+    border-left-color: var(--orange);
+  }
+  .blk.error {
+    background: color-mix(in srgb, var(--red) 26%, var(--surface));
+    border-color: color-mix(in srgb, var(--red) 55%, transparent);
+    border-left-color: var(--red);
+  }
+  .blk.on { box-shadow: 0 0 0 2px var(--ink); z-index: 2; }
   .blk .grip {
     position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize;
     background: transparent;
   }
   .blk .grip.l { left: 0; }
   .blk .grip.r { right: 0; }
-  .blk:hover .grip { background: var(--blue-soft); }
+  .blk:hover .grip::after {
+    content: ""; position: absolute; top: 50%; width: 2px; height: 18px;
+    margin-top: -9px; border-radius: 1px; background: color-mix(in srgb, var(--ink) 60%, transparent);
+  }
+  .blk .grip.l::after { left: 2px; }
+  .blk .grip.r::after { right: 2px; }
+
   .head {
-    position: absolute; top: 0; bottom: 0; width: 1px;
-    background: var(--red); pointer-events: none; z-index: 3;
+    position: absolute; top: 0; bottom: 0; width: 0;
+    border-left: 1px solid var(--red); pointer-events: none; z-index: 3;
   }
   .head::before {
-    content: ""; position: absolute; top: 0; left: -4px;
-    width: 9px; height: 7px; border-radius: 0 0 3px 3px; background: var(--red);
+    content: ""; position: absolute; top: 0; left: -6px;
+    width: 11px; height: 12px; background: var(--red);
+    clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
   }
   /* Лінія прилипання: поки її видно, край стоїть не там, де курсор, а там,
      де сусід або головка — інакше зсув на пів пікселя читався б як промах. */
   .magnet {
-    position: absolute; top: 14px; bottom: 0; width: 1px;
-    background: var(--green); pointer-events: none; z-index: 4; display: none;
+    position: absolute; top: 24px; bottom: 0; width: 0;
+    border-left: 1px solid var(--green); pointer-events: none; z-index: 4; display: none;
+    box-shadow: 0 0 6px var(--green);
   }
   .magnet.show { display: block; }
 
-  /* --- Підказки клавіш -------------------------------------------------- */
+  /* --- Рядок стану з клавішами ---------------------------------------------- */
 
   .keys {
-    flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 4px 14px;
-    padding: 8px 2px 12px; color: var(--faint); font-size: 11px;
+    display: flex; align-items: center; gap: 4px 16px; overflow: hidden; white-space: nowrap;
+    padding: 0 14px; color: var(--faint); font-size: 11px;
+    background: var(--panel); border-top: 1px solid var(--hair);
   }
   .keys kbd {
     font-family: var(--mono); font-size: 10px; color: var(--dim);
-    background: var(--fill); border-radius: 4px; padding: 1px 5px; margin-right: 3px;
+    background: var(--fill); border: 1px solid var(--hair); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 4px; margin-right: 4px;
   }
-
-  /* --- Список реплік ---------------------------------------------------- */
-
-  .row {
-    display: grid; grid-template-columns: 3px 30px minmax(0, 1fr);
-    gap: 0 10px; align-items: start;
-    padding: 11px 14px 11px 0; border-bottom: 1px solid var(--hair);
-    cursor: default;
-  }
-  .row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
-  .row.on { background: var(--blue-soft); }
-  .stripe { align-self: stretch; border-radius: 0 2px 2px 0; background: transparent; }
-  .row.warning .stripe { background: var(--orange); }
-  .row.error .stripe { background: var(--red); }
-  .row .num { color: var(--faint); font-size: 11px; text-align: right; padding-top: 5px; }
-
-  .body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-  .times { display: flex; align-items: center; gap: 6px; }
-  .times input {
-    width: 10ch; padding: 3px 5px; text-align: center;
-    font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums;
-    color: var(--ink); background: var(--fill); border: 1px solid transparent;
-    border-radius: 5px;
-  }
-  .times input:hover { border-color: var(--hair); }
-  .times input:focus { background: var(--raised); border-color: var(--blue); outline: none; }
-  .times .arrow { color: var(--faint); font-size: 11px; }
-  .times .dur { color: var(--dim); font-size: 11px; font-family: var(--mono); }
-
-  .acts { display: flex; gap: 2px; margin-left: auto; opacity: 0; transition: opacity .12s ease; }
-  .row:hover .acts, .row.on .acts, .acts:focus-within { opacity: 1; }
-  .acts button {
-    appearance: none; border: 0; cursor: pointer; border-radius: 5px;
-    background: transparent; color: var(--dim); font: 500 11px/1 var(--ui);
-    padding: 4px 7px;
-  }
-  .acts button:hover { background: var(--fill-hi); color: var(--ink); }
-  .acts button.danger:hover { background: color-mix(in srgb, var(--red) 24%, transparent); color: var(--red); }
-
-  .row textarea {
-    width: 100%; resize: none; overflow: hidden;
-    font: 400 13px/1.4 var(--ui); color: var(--ink);
-    background: transparent; border: 1px solid transparent; border-radius: 7px;
-    padding: 5px 7px; margin: -1px -8px; box-sizing: content-box;
-  }
-  .row textarea:hover { border-color: var(--hair); }
-  .row textarea:focus {
-    background: var(--raised); border-color: var(--blue); outline: none;
-    box-shadow: 0 0 0 3px var(--blue-soft);
-  }
-
-  .meters { display: flex; align-items: center; gap: 10px; color: var(--dim); font-size: 11px; }
-  .meters .num { font-size: 11px; }
-  .meters .over { color: var(--red); }
-  .meters .near { color: var(--orange); }
-  .bar {
-    flex: 0 0 56px; height: 3px; border-radius: 2px;
-    background: var(--fill); overflow: hidden;
-  }
-  .bar i { display: block; height: 100%; background: var(--green); border-radius: 2px; }
-  .bar i.near { background: var(--orange); }
-  .bar i.over { background: var(--red); }
-
-  .why { display: flex; flex-direction: column; gap: 3px; font-size: 11px; }
-  .why .warning { color: var(--orange); }
-  .why .error { color: var(--red); }
-
-  .blank { padding: 28px 20px; color: var(--dim); text-align: center; }
 
   /* --- Смуга збереження і сповіщення ------------------------------------ */
 
   .ask {
-    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    position: fixed; left: 50%; bottom: 190px; transform: translateX(-50%);
     display: none; align-items: center; gap: 12px; z-index: 20;
-    padding: 10px 12px 10px 16px; border-radius: 12px;
-    background: var(--glass); backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    border: 1px solid var(--hair); box-shadow: 0 8px 32px var(--shade);
-    font-size: 12px; max-width: min(560px, 92vw);
+    padding: 10px 10px 10px 16px; border-radius: 10px;
+    background: var(--raised); border: 1px solid var(--line);
+    box-shadow: 0 12px 40px var(--shade);
+    font-size: 12px; max-width: min(600px, 92vw);
+  }
+  .ask::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--orange);
   }
   .ask.show { display: flex; }
   .toast {
-    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(8px);
-    z-index: 21; padding: 9px 16px; border-radius: 999px;
-    background: var(--glass); backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    border: 1px solid var(--hair); box-shadow: 0 8px 32px var(--shade);
+    position: fixed; left: 50%; bottom: 190px; transform: translateX(-50%) translateY(8px);
+    z-index: 21; padding: 8px 14px; border-radius: 8px;
+    background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--line); box-shadow: 0 8px 28px var(--shade);
     font-size: 12px; opacity: 0; pointer-events: none;
-    transition: opacity .2s ease, transform .2s ease;
+    transition: opacity .18s ease, transform .18s ease;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* --- Вузький екран: усе в стовпчик, сторінка гортається ------------------ */
+
+  @media (max-width: 1000px) {
+    body { overflow: auto; display: block; }
+    main { grid-template-columns: 1fr; }
+    .viewer { container-type: inline-size; padding: 12px; }
+    .frame { width: 100%; }
+    .side { border-left: 0; border-top: 1px solid var(--line); }
+    .cues { max-height: 70vh; }
+    .timeline { position: sticky; bottom: 0; z-index: 6; }
+    .keys { display: none; }
+    .ask, .toast { bottom: 24px; }
+  }
 </style>
 </head>
 <body>
 
 <div class="toolbar">
+  <div class="mark" aria-hidden="true">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h10M3 10h6"/></svg>
+  </div>
   <div class="doc">
     <b>__TITLE__</b>
     <span id="stamp">читаю…</span>
   </div>
-  <div class="seg" role="tablist" id="seg">
-    <button role="tab" aria-selected="true" data-filter="all">Усі</button>
-    <button role="tab" aria-selected="false" data-filter="bad">Проблемні</button>
-  </div>
-  <div class="tally" id="tally"></div>
   <div class="grow"></div>
-  <button class="btn icon" id="theme" title="Світла або темна тема">◐</button>
-  <button class="btn" id="rewrap" title="Перескласти рядки за лімітами">Перерозкласти</button>
-  <button class="btn primary" id="save" disabled>Зберегти</button>
+  <button class="btn ghost icon" id="theme" title="Світла або темна тема" aria-label="Тема">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg>
+  </button>
+  <button class="btn" id="rewrap" title="Перескласти рядки за лімітами">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M2.5 8h9a2 2 0 0 1 0 4H8m1.5-1.5L8 12l1.5 1.5M2.5 12h3"/></svg>
+    Перерозкласти
+  </button>
+  <button class="btn primary" id="save" disabled title="Ctrl+S">Зберегти</button>
 </div>
 
 <main>
-  <section class="canvas">
+  <section class="viewer">
     <div class="frame" id="frame">
       <video id="video" src="/video" preload="metadata" playsinline></video>
+      <div class="nofeed">Відео не читається — текст і таймкоди правити можна</div>
       <div class="safe"></div>
       <div class="caption" id="caption"></div>
     </div>
-
-    <div class="transport">
-      <button class="btn icon" id="play" title="Пробіл">▶</button>
-      <span class="tc" id="clock">0:00.00</span>
-      <span class="tc of" id="total">/ —</span>
-      <button class="btn" id="split" title="Розрізати вибрану репліку по головці">Розділити</button>
-      <div class="grow"></div>
-      <button class="btn icon on" id="magnet" title="Прилипання до сусідів і головки" aria-pressed="true">⌁</button>
-      <button class="btn icon" id="out" title="Віддалити">−</button>
-      <button class="btn icon" id="in" title="Наблизити">+</button>
-      <button class="btn" id="fit">Умістити</button>
-      <label class="switch"><input type="checkbox" id="guides">Рамка кадру</label>
-      <label class="switch"><input type="checkbox" id="follow" checked>Стежити</label>
-    </div>
-
-    <div class="ribbon" id="ribbon">
-      <div class="track" id="track">
-        <div class="magnet" id="magnetLine"></div>
-        <div class="head" id="head"></div>
-      </div>
-    </div>
-
-    <div class="keys">
-      <span><kbd>Пробіл</kbd>грати</span>
-      <span><kbd>↑ ↓</kbd>репліка</span>
-      <span><kbd>← →</kbd>перемотка</span>
-      <span><kbd>[</kbd><kbd>]</kbd>межа по головці</span>
-      <span><kbd>Enter</kbd>правити текст</span>
-      <span><kbd>Ctrl+колесо</kbd>масштаб</span>
-      <span><kbd>Ctrl+Z</kbd>відкотити</span>
-      <span><kbd>Ctrl+S</kbd>зберегти</span>
-    </div>
   </section>
 
-  <section class="cues" id="list"></section>
+  <section class="side">
+    <div class="side-head">
+      <div class="seg" role="tablist" id="seg">
+        <button role="tab" aria-selected="true" data-filter="all">Усі</button>
+        <button role="tab" aria-selected="false" data-filter="bad">Проблемні</button>
+      </div>
+      <div class="tally" id="tally"></div>
+    </div>
+    <div class="cols" aria-hidden="true">
+      <span></span><span>№</span><span>Час</span><span>Текст</span><span title="Символів за секунду">Темп</span>
+    </div>
+    <div class="cues" id="list"></div>
+  </section>
 </main>
+
+<section class="timeline">
+  <div class="transport">
+    <button class="btn icon play" id="play" title="Грати / пауза (Пробіл)" aria-label="Грати">
+      <svg class="i-play" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8.2-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5z"/></svg>
+      <svg class="i-pause" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3" height="11" rx=".8"/><rect x="9.5" y="2.5" width="3" height="11" rx=".8"/></svg>
+    </button>
+    <div class="clock">
+      <span class="tc" id="clock">0:00.00</span>
+      <span class="tc of" id="total">/ —</span>
+    </div>
+    <span class="sep"></span>
+    <button class="btn ghost" id="split" title="Розрізати вибрану репліку по головці">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="4" cy="4.5" r="2"/><circle cx="4" cy="11.5" r="2"/><path d="M5.7 5.6 13.5 12M5.7 10.4 13.5 4"/></svg>
+      Розділити
+    </button>
+    <div class="grow"></div>
+    <label class="switch"><input type="checkbox" id="guides">Рамка кадру</label>
+    <label class="switch"><input type="checkbox" id="follow" checked>Стежити</label>
+    <span class="sep"></span>
+    <button class="btn ghost icon on" id="magnet" title="Прилипання до сусідів і головки" aria-pressed="true">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3.5 2.5v5a4.5 4.5 0 0 0 9 0v-5"/><path d="M3.5 5h2.5M10 5h2.5" /><path d="M6 2.5v5a2 2 0 0 0 4 0v-5"/></svg>
+    </button>
+    <button class="btn ghost icon" id="out" title="Віддалити" aria-label="Віддалити">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M5 7h4M10.5 10.5 14 14"/></svg>
+    </button>
+    <button class="btn ghost icon" id="in" title="Наблизити" aria-label="Наблизити">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M5 7h4M7 5v4M10.5 10.5 14 14"/></svg>
+    </button>
+    <button class="btn ghost" id="fit" title="Показати все відео">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12M4.5 5.5 2 8l2.5 2.5M11.5 5.5 14 8l-2.5 2.5"/></svg>
+      Умістити
+    </button>
+  </div>
+
+  <div class="ribbon" id="ribbon">
+    <div class="track" id="track">
+      <div class="magnet" id="magnetLine"></div>
+      <div class="head" id="head"></div>
+    </div>
+  </div>
+</section>
+
+<div class="keys">
+  <span><kbd>Пробіл</kbd>грати</span>
+  <span><kbd>↑</kbd><kbd>↓</kbd>репліка</span>
+  <span><kbd>←</kbd><kbd>→</kbd>перемотка</span>
+  <span><kbd>[</kbd><kbd>]</kbd>межа по головці</span>
+  <span><kbd>Enter</kbd>правити текст</span>
+  <span><kbd>Ctrl</kbd>+колесо — масштаб</span>
+  <span><kbd>Ctrl+Z</kbd>відкотити</span>
+  <span><kbd>Ctrl+S</kbd>зберегти</span>
+</div>
 
 <div class="ask" id="ask">
   <span id="askText"></span>
@@ -822,6 +1003,14 @@ let fingerprint = null;
 // лишились після видалення, і мітки стали б навпроти чужого тексту.
 let seq = 0;
 let rev = 0;
+
+// Іконки дій у рядку. Розмітка своя, не з даних, тож innerHTML тут безпечний.
+const SVG = "<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>";
+const ICONS = {
+  split: SVG + "<circle cx='4' cy='4.5' r='2'/><circle cx='4' cy='11.5' r='2'/><path d='M5.7 5.6 13.5 12M5.7 10.4 13.5 4'/></svg>",
+  merge: SVG + "<path d='M3 3v3.5a2 2 0 0 0 2 2h6a2 2 0 0 1 2 2V13M3 13v-2.5M10.5 11 13 13.5 15.5 11'/></svg>",
+  drop: SVG + "<path d='M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5'/></svg>",
+};
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const duration = () => (isFinite(video.duration) && video.duration > 0)
@@ -1002,13 +1191,11 @@ function makeRow(i) {
   times.className = "times";
   const from = timeField(i, "start");
   const to = timeField(i, "end");
-  const arrow = document.createElement("span");
-  arrow.className = "arrow";
-  arrow.textContent = "→";
+  from.title = "Початок · ↑↓ крок 0,05 с, із Shift — 1 с";
+  to.title = "Кінець · ↑↓ крок 0,05 с, із Shift — 1 с";
   const dur = document.createElement("span");
   dur.className = "dur";
-  times.append(from, arrow, to, dur);
-  times.append(actions(i));
+  times.append(from, to, dur);
 
   const area = document.createElement("textarea");
   area.rows = 1;
@@ -1036,8 +1223,8 @@ function makeRow(i) {
   const why = document.createElement("div");
   why.className = "why";
 
-  body.append(times, area, meters, why);
-  row.append(stripe, num, body);
+  body.append(area, why);
+  row.append(stripe, num, times, body, meters, actions(i));
   rows.set(i, { row: row, from: from, to: to, dur: dur, area: area, meters: meters, why: why, grown: null });
   return row;
 }
@@ -1071,18 +1258,19 @@ function timeField(i, key) {
 function actions(i) {
   const box = document.createElement("div");
   box.className = "acts";
-  const make = (label, hint, kind, run) => {
+  const make = (icon, hint, kind, run) => {
     const button = document.createElement("button");
-    button.textContent = label;
+    button.innerHTML = ICONS[icon];
     button.title = hint;
+    button.setAttribute("aria-label", hint);
     if (kind) button.className = kind;
     button.onclick = run;
     box.append(button);
     return button;
   };
-  make("Розділити", "Розрізати репліку по головці", "", () => split(i));
-  make("Злити", "Приєднати наступну репліку", "", () => merge(i));
-  make("Видалити", "Прибрати репліку", "danger", () => drop(i));
+  make("split", "Розрізати репліку по головці", "", () => split(i));
+  make("merge", "Приєднати наступну репліку", "", () => merge(i));
+  make("drop", "Прибрати репліку", "danger", () => drop(i));
   return box;
 }
 
@@ -1130,16 +1318,14 @@ function paintTimes(i) {
 function paintMeters(box, mark) {
   box.replaceChildren();
   const budget = limits.max_line_chars * limits.max_lines;
-  const chars = document.createElement("span");
-  chars.className = "num" + (mark.chars > budget ? " over" : "");
-  chars.textContent = mark.chars + "/" + budget + " симв";
 
   const rate = document.createElement("span");
   const speed = mark.cps === null ? null : mark.cps;
   const over = speed !== null && speed > limits.max_cps;
   const near = speed !== null && !over && speed > limits.max_cps * 0.9;
-  rate.className = "num" + (over ? " over" : near ? " near" : "");
-  rate.textContent = (speed === null ? "∞" : speed.toFixed(1)) + " симв/с";
+  rate.className = "num cps" + (over ? " over" : near ? " near" : "");
+  rate.title = "Швидкість читання, символів за секунду; стеля " + limits.max_cps;
+  rate.textContent = speed === null ? "∞" : speed.toFixed(1);
 
   const bar = document.createElement("div");
   bar.className = "bar";
@@ -1148,11 +1334,17 @@ function paintMeters(box, mark) {
   fill.style.width = clamp(((speed === null ? limits.max_cps * 2 : speed) / limits.max_cps) * 100, 0, 100) + "%";
   bar.append(fill);
 
+  const chars = document.createElement("span");
+  chars.className = "num" + (mark.chars > budget ? " over" : "");
+  chars.title = "Символів із " + budget;
+  chars.textContent = mark.chars + "/" + budget;
+
   const lines = document.createElement("span");
   lines.className = "num" + (mark.lines.length > limits.max_lines ? " over" : "");
+  lines.title = "Рядків із " + limits.max_lines;
   lines.textContent = mark.lines.length + "/" + limits.max_lines + " ряд";
 
-  box.append(chars, rate, bar, lines);
+  box.append(rate, bar, chars, lines);
 }
 
 // --- Лінійка --------------------------------------------------------------- //
@@ -1227,10 +1419,11 @@ function placeBlock(i) {
   const parts = blocks.get(i);
   if (!parts) return;
   const cue = cues[i];
-  const mark = marks[i];
-  parts.block.className = "blk " + (mark ? mark.level : "ok") + (i === picked ? " on" : "");
+  const width = (cue.end - cue.start) * pps;
+  parts.thin = width < THIN_PX;
+  parts.block.className = blockClass(i, parts);
   parts.block.style.left = (cue.start * pps) + "px";
-  parts.block.style.width = Math.max(3, (cue.end - cue.start) * pps) + "px";
+  parts.block.style.width = Math.max(3, width) + "px";
   parts.block.title = clockText(cue.start) + " → " + clockText(cue.end);
   if (parts.label.textContent !== cue.text) parts.label.textContent = cue.text;
 }
@@ -1241,10 +1434,16 @@ function placeBlocks() {
 
 // Приїхали свіжі мітки — змінився лише колір, не геометрія.
 function paintLevels() {
-  for (const [i, parts] of blocks) {
-    const mark = marks[i];
-    parts.block.className = "blk " + (mark ? mark.level : "ok") + (i === picked ? " on" : "");
-  }
+  for (const [i, parts] of blocks) parts.block.className = blockClass(i, parts);
+}
+
+// Вужчий за це блок — лише кольорова риска: два-три обрізані символи в ньому
+// не читаються, а на загальному плані зливаються в суцільну кашу з літер.
+const THIN_PX = 34;
+
+function blockClass(i, parts) {
+  const mark = marks[i];
+  return "blk " + (mark ? mark.level : "ok") + (parts.thin ? " thin" : "") + (i === picked ? " on" : "");
 }
 
 function layout() {
@@ -1273,6 +1472,18 @@ function zoomAt(factor, clientX) {
 
 function fit() {
   pps = clamp((ribbon.clientWidth - 8) / duration(), 0.5, 400);
+  layout();
+  ribbon.scrollLeft = 0;
+}
+
+// Стартовий масштаб — робочий, а не загальний план: на чотирнадцяти хвилинах
+// «умістити все» дає сотні рисок без тексту. Сорок секунд у вікні — це кілька
+// реплік, які видно й можна тягнути; коротке відео вміщається цілим.
+const OPENING_SPAN = 40;
+
+function settle() {
+  const whole = (ribbon.clientWidth - 8) / duration();
+  pps = clamp(Math.max(whole, ribbon.clientWidth / OPENING_SPAN), 0.5, 400);
   layout();
   ribbon.scrollLeft = 0;
 }
@@ -1644,25 +1855,30 @@ document.addEventListener("keydown", (event) => {
 // --- Дроти ------------------------------------------------------------------------ //
 
 video.addEventListener("play", () => {
-  $("play").textContent = "❙❙";
+  $("play").classList.toggle("playing", true);
   if (ticking) return;
   ticking = true;
   requestAnimationFrame(loop);
 });
-video.addEventListener("pause", () => { $("play").textContent = "▶"; });
+video.addEventListener("pause", () => { $("play").classList.toggle("playing", false); });
 video.addEventListener("seeked", () => { if (!ticking) tick(); });
 video.addEventListener("timeupdate", () => { if (!ticking) tick(); });
 video.addEventListener("loadedmetadata", () => {
   total.textContent = "/ " + clockText(video.duration);
-  fit();
+  // Кадр бере пропорцію з самого відео: вертикальний ролик у рамці 16:9
+  // показав би підпис не там, де його побачить глядач.
+  if (video.videoWidth && video.videoHeight) {
+    $("frame").style.setProperty("--ar", String(video.videoWidth / video.videoHeight));
+  }
+  settle();
   tick();
 });
 video.addEventListener("error", () => {
   // Відео може бути ще не змонтоване або лежати не там. Текст і таймкоди від
   // цього не залежать, тому редактор лишається робочим — але мовчати не варто.
   total.textContent = "/ немає відео";
-  flash("Відео не читається — текст і таймкоди правити можна");
-  fit();
+  $("frame").classList.add("empty");
+  settle();
 });
 
 $("play").onclick = run;
@@ -1738,7 +1954,9 @@ async function boot() {
     paintTally(data);
     buildRows();
     buildBlocks();
-    layout();
+    // Відео могло відмовити ще до реплік — тоді масштаб рахували по порожній
+    // довжині, і його треба перерахувати по самих репліках.
+    if (isFinite(video.duration) && video.duration > 0) layout(); else settle();
     tick();
   } catch (error) {
     // Без реплік сторінка нічим не корисна, і мовчазне «читаю…» назавжди —
