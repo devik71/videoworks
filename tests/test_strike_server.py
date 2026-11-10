@@ -82,6 +82,8 @@ def test_static_files_are_served_with_their_types(server) -> None:
         "/app.js": "text/javascript; charset=utf-8",
         "/logic.js": "text/javascript; charset=utf-8",
         "/brush.js": "text/javascript; charset=utf-8",
+        "/player.js": "text/javascript; charset=utf-8",
+        "/sheet.js": "text/javascript; charset=utf-8",
         "/sound.js": "text/javascript; charset=utf-8",
     }
     assert {route: kind for route, (_, kind) in STATIC.items()} == expected

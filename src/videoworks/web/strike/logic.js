@@ -88,6 +88,9 @@ export function strokePath(width, height, seedValue) {
   const pad = 6;
   const n = Math.max(2, Math.ceil(w / 12) + 1);
   const slant = (rnd() - 0.5) * 3;
+  // Пензель сохне на останніх сантиметрах, а не на третині рядка: на довгому
+  // мазку частка ширини лишала б останні слова ледь зачепленими.
+  const tail = Math.min(0.3, 72 / w);
   const top = [];
   const bottom = [];
   for (let k = 0; k < n; k++) {
@@ -97,8 +100,8 @@ export function strokePath(width, height, seedValue) {
     let thick = h * (0.62 + (rnd() - 0.5) * 0.24);
     if (u < 0.15) thick *= 1.25; // потовщення там, де пензель торкнувся
     let fray = 0.6;
-    if (u > 0.7) {
-      const dry = (u - 0.7) / 0.3;
+    if (u > 1 - tail) {
+      const dry = (u - (1 - tail)) / tail;
       thick *= 1 - 0.65 * dry; // хвіст тоншає
       fray += 2.4 * dry; // і рветься
     }
@@ -282,7 +285,10 @@ export class Outbox {
     try {
       const raw = this.storage.getItem(this.key);
       if (raw === null || raw === undefined) return null;
-      this.held = JSON.parse(raw);
+      const found = JSON.parse(raw);
+      // Під ключем може лежати сміття; знімок без обох списків зламав би сторінку далі.
+      if (!found || !Array.isArray(found.struck) || !Array.isArray(found.manual)) return null;
+      this.held = found;
       return copyOf(this.held);
     } catch {
       return null;

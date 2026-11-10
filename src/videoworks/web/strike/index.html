@@ -1,1 +1,66 @@
-<!doctype html><title>strike</title>
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Викреслювач</title>
+<!-- Порожня іконка: без неї браузер сам піде по /favicon.ico й отримає 404. -->
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<main class="desk">
+  <aside class="stage">
+    <!-- Адресу відео ставить скрипт: спершу мусить стати на місце слухач помилки. -->
+    <video id="video" preload="metadata" playsinline aria-label="Запис заняття"></video>
+  </aside>
+
+  <section id="sheet" tabindex="0" aria-label="Текст заняття">
+    <div class="notes"><div id="banner" role="alert" hidden></div></div>
+    <div class="page" id="page">
+      <p class="quiet-state">Розгортаю аркуш…</p>
+    </div>
+  </section>
+
+  <!-- Мапа заняття: місце вже зайняте, малювання додає наступний крок. -->
+  <div id="map" aria-hidden="true"></div>
+</main>
+
+<footer id="bar">
+  <button type="button" class="round" id="play" aria-label="Грати" title="Грати або спинити — Пробіл">
+    <svg class="icon icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z"/></svg>
+    <svg class="icon icon-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3.2v11h-3.2zM9.3 2.5h3.2v11h-3.2z"/></svg>
+  </button>
+
+  <div class="switch" id="mode" role="radiogroup" aria-label="Як грати">
+    <button type="button" role="radio" data-mode="phrase" aria-checked="true"
+            title="Фраза звучить і спиняється — стрілки ведуть далі">по фразах</button>
+    <button type="button" role="radio" data-mode="flow" aria-checked="false"
+            title="Запис грає без зупинок">підряд</button>
+  </div>
+
+  <span class="clock" id="clock"></span>
+
+  <span class="steps">
+    <button type="button" class="round" id="undo" disabled aria-label="Скасувати мазок" title="Скасувати — Ctrl+Z">
+      <svg class="icon line" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3 2.5 6.5 6 10M3 6.5h6.5a3.5 3.5 0 0 1 0 7H7"/></svg>
+    </button>
+    <button type="button" class="round" id="redo" disabled aria-label="Повернути мазок" title="Повернути — Ctrl+Shift+Z">
+      <svg class="icon line" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3l3.5 3.5L10 10M13 6.5H6.5a3.5 3.5 0 0 0 0 7H9"/></svg>
+    </button>
+  </span>
+
+  <span id="count"></span>
+  <span id="saved" aria-live="polite"></span>
+  <span id="hint"></span>
+
+  <span class="tail">
+    <button type="button" class="pill" id="review" disabled>перевірити викреслене</button>
+    <button type="button" class="round" id="help" disabled aria-label="Довідка по клавішах">?</button>
+  </span>
+</footer>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

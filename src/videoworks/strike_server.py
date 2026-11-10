@@ -29,6 +29,8 @@ STATIC: dict[str, tuple[str, str]] = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/logic.js": ("logic.js", "text/javascript; charset=utf-8"),
     "/brush.js": ("brush.js", "text/javascript; charset=utf-8"),
+    "/player.js": ("player.js", "text/javascript; charset=utf-8"),
+    "/sheet.js": ("sheet.js", "text/javascript; charset=utf-8"),
     "/sound.js": ("sound.js", "text/javascript; charset=utf-8"),
 }
 

@@ -217,3 +217,31 @@ test("Outbox не падає, коли сховище кидає", () => {
   o.markSent(S1);
   assert.equal(o.pending, false);
 });
+
+test("Outbox.restore не віддає того, що не схоже на знімок", () => {
+  // У сховищі може лежати що завгодно: чужий ключ, обрізаний запис, стара версія.
+  for (const junk of ["null", "7", "\"x\"", "[]", "{}", "{\"struck\":[1]}", "{\"struck\":{},\"manual\":[]}", "{"]) {
+    const storage = fakeStorage();
+    storage.setItem("k", junk);
+    const o = new Outbox(storage, "k");
+    assert.equal(o.restore(), null, junk);
+    assert.equal(o.pending, false, junk);
+  }
+});
+
+test("strokePath: сухий хвіст короткий, довгий мазок не тоншає на останніх словах", () => {
+  // Хвіст у частку ширини на довгому рядку лишав би останні слова ледь зачепленими.
+  const w = 1000;
+  const h = 30;
+  for (const s of [0, 1, seed(5), seed(77)]) {
+    const nums = strokePath(w, h, s).match(/-?\d+(\.\d+)?/g).map(Number);
+    const at = new Map(); // x -> усі y контуру на цій вертикалі: верхній і нижній край
+    for (let i = 0; i < nums.length; i += 2) {
+      if (nums[i] <= w - 200 || nums[i] >= w - 80) continue;
+      at.set(nums[i], [...(at.get(nums[i]) ?? []), nums[i + 1]]);
+    }
+    const thick = [...at.values()].filter((ys) => ys.length > 1).map((ys) => Math.max(...ys) - Math.min(...ys));
+    assert.ok(thick.length >= 4);
+    assert.ok(Math.min(...thick) >= h * 0.42, `seed ${s}: ${Math.min(...thick)}`);
+  }
+});
