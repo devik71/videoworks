@@ -25,12 +25,18 @@ export function createPlayer(video, { spans, onTick, onChange }) {
       made.createMediaElementSource(video).connect(node).connect(made.destination);
       context = made;
       gain = node;
+      // Заглушений елемент віддає в граф тишу, і жодна гучність її вже не підніме.
+      video.muted = false;
+      hushed = null;
     } catch {
       plain = true;
     }
   }
 
   function hush(t) {
+    // До першого запуску графа ще немає, а чим глушити — невідомо: чіпати
+    // video.muted можна лише тоді, коли WebAudio справді недоступний.
+    if (!gain && !plain) return;
     const want = isMuted(spans(), t + LOOKAHEAD);
     if (want === hushed) return;
     hushed = want;

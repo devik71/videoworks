@@ -11,6 +11,9 @@ const EDGE = 0.15; // с: межі слів від ASR неточні, тож ф
 const LINGER = 0.12; // с: слово ще підсвічене, поки не почалось наступне
 const SAVE_DELAY = 500;
 const RETRY_DELAY = 3000;
+// Залишок без відбитка (записаний старішою сторінкою): невідомо, від чого його робили,
+// тож вважаємо основу застарілою. Справжній відбиток — sha256 або порожній рядок.
+const UNKNOWN_BASE = "?";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -64,6 +67,9 @@ function snapshot() {
     struck: [...state.struck].sort((a, b) => a - b),
     manual: state.manual.map((pair) => [pair[0], pair[1]]),
     transcript: state.data.transcript,
+    // Від якої версії файлу зроблено правку: залишок, що пережив перезавантаження,
+    // мусить іти на сервер зі своїм старим відбитком, а не зі щойно прочитаним.
+    stamp: state.stamp,
   };
 }
 
@@ -301,8 +307,12 @@ async function save({ force = false } = {}) {
     outbox.markSent(sent);
     unnote("save");
     showCounts();
-    if (outbox.pending) schedule(0);
-    else say("збережено");
+    if (outbox.pending) {
+      // Новіша правка в черзі зроблена поверх щойно записаного — оновлюємо їй основу,
+      // інакше власний запис сторінки виглядав би чужою зміною файлу.
+      outbox.set(snapshot());
+      schedule(0);
+    } else say("збережено");
   } else if (reply && reply.moved) {
     say("не збережено", true);
     const reread = ["перечитати", () => load({ drop: true })];
@@ -405,9 +415,16 @@ async function load({ drop = false } = {}) {
   }
 
   if (kept && kept.transcript === data.transcript) {
-    // Минулого разу правка не дійшла до файлу: повертаємо її й досилаємо одразу.
+    // Минулого разу правка не дійшла до файлу: повертаємо її й досилаємо одразу —
+    // але з тим відбитком, від якого її робили. Якщо файл відтоді змінили деінде,
+    // сервер відмовить, і людина сама обере, чиї позначки лишити.
+    const fresh = state.stamp;
+    state.stamp = typeof kept.stamp === "string" ? kept.stamp : UNKNOWN_BASE;
     if (commit(cleaned(kept))) save();
-    else outbox.markSent(kept);
+    else {
+      state.stamp = fresh;
+      outbox.markSent(kept);
+    }
   } else if (kept) {
     outbox.markSent(kept);
     els.hint.textContent = "Останні незбережені мазки не підійшли до нової розшифровки.";

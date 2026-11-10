@@ -245,3 +245,18 @@ test("strokePath: сухий хвіст короткий, довгий мазо�
     assert.ok(Math.min(...thick) >= h * 0.42, `seed ${s}: ${Math.min(...thick)}`);
   }
 });
+
+test("Outbox несе відбиток основи, але порівнює знімки без нього", () => {
+  // Сторінка кладе в знімок відбиток файлу, від якого зроблено правку: після
+  // перезавантаження залишок іде на сервер зі старим відбитком і не затирає чуже.
+  const storage = fakeStorage();
+  const o = new Outbox(storage, "k");
+  o.set({ ...S1, transcript: "t", stamp: "old" });
+  assert.equal(new Outbox(storage, "k").restore().stamp, "old");
+  // Та сама правка з оновленою основою замінює відбиток, а не стає іншою правкою.
+  o.set({ ...S1, transcript: "t", stamp: "new" });
+  assert.equal(new Outbox(storage, "k").restore().stamp, "new");
+  o.markSent({ ...S1, transcript: "t", stamp: "whatever" });
+  assert.equal(o.pending, false);
+  assert.equal(new Outbox(storage, "k").restore(), null);
+});
