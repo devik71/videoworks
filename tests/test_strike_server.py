@@ -188,6 +188,8 @@ def test_refusing_disk_is_reported_as_json(tmp_path) -> None:
         {"words": [], "manual": [[-1, 2]]},
         {"words": [], "manual": [[0, 1e9]]},
         {"words": [], "manual": [[float("nan"), 2]]},
+        {"words": [], "manual": [[0, 10**400]]},
+        {"words": [10**400]},
     ],
 )
 def test_broken_bodies_get_400_and_write_nothing(server, body) -> None:

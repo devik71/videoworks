@@ -69,7 +69,11 @@ def read_intent(
             raise BadRequest("відрізок має бути парою [початок, кінець]")
         if not all(_is_number(edge) for edge in pair):
             raise BadRequest("межі відрізка мають бути числами")
-        start, end = float(pair[0]), float(pair[1])
+        try:
+            start, end = float(pair[0]), float(pair[1])
+        except OverflowError as exc:
+            # Ціле на сотні цифр JSON читає без скарг, а float() на ньому падає.
+            raise BadRequest("межа відрізка завелика") from exc
         # NaN проходить float() мовчки й ламає всі порівняння; Infinity JSON
         # у браузері не прочитає. Обидва відсіює isfinite.
         if not (math.isfinite(start) and math.isfinite(end)):
