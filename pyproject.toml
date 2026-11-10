@@ -15,6 +15,7 @@ dependencies = [
     # без цих двох faster-whisper падає з "Could not locate cudnn_ops64_9.dll"
     "nvidia-cublas-cu12>=12.4",
     "nvidia-cudnn-cu12>=9.1",
+    "scipy>=1.14",
 ]
 
 [project.optional-dependencies]

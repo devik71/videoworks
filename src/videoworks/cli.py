@@ -1022,6 +1022,31 @@ def show(
             console.print(f"    [dim]{line}[/]")
 
 
+@app.command(name="soundtrack-test")
+def soundtrack_test(
+    project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
+    start: Annotated[float, typer.Option(help="Початок уривка у відео, с")] = 0,
+    seconds: Annotated[float, typer.Option(help="Тривалість пілота, 30–180 с")] = 120,
+    sync_only: Annotated[bool, typer.Option(help="Лише пошук і перевірка сінку")] = False,
+    video: Annotated[bool, typer.Option(help="Також зібрати відео до/після")] = False,
+) -> None:
+    """Експеримент: один трек, короткий уривок, сінк + дакінг під голос."""
+    from videoworks.soundtrack.trial import run_trial
+
+    project = paths.resolve(project_name)
+    try:
+        report = run_trial(project, start=start, seconds=seconds, sync_only=sync_only,
+                           video=video, progress=lambda message: console.print(message, markup=False))
+    except (ValueError, FileNotFoundError, RuntimeError) as exc:
+        console.print(f"[red]Тест зупинено:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    match = report["match"]
+    console.print(f"[green]Сінк:[/] {Path(match['track']).name}, "
+                  f"зсув {match['offset']:.6f} с, дрейф {(match['rate']-1)*1e6:.1f} ppm, "
+                  f"залишок {match['residual_ms']:.2f} мс")
+    console.print(f"Артефакти: {project.out / 'soundtrack-test'}")
+
+
 def main() -> None:
     app()
 

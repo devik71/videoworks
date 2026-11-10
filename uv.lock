@@ -2354,6 +2354,7 @@ dependencies = [
     { name = "pysubs2" },
     { name = "rich" },
     { name = "scenedetect" },
+    { name = "scipy" },
     { name = "typer" },
 ]
 
@@ -2390,6 +2391,7 @@ requires-dist = [
     { name = "pysubs2", specifier = ">=1.7" },
     { name = "rich", specifier = ">=13.9" },
     { name = "scenedetect", specifier = ">=0.7" },
+    { name = "scipy", specifier = ">=1.14" },
     { name = "torch", marker = "(sys_platform == 'linux' and extra == 'moss') or (sys_platform == 'win32' and extra == 'moss')", specifier = ">=2.8", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torch", marker = "(sys_platform == 'linux' and extra == 'whisperx') or (sys_platform == 'win32' and extra == 'whisperx')", specifier = ">=2.8", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32' and extra == 'moss'", specifier = ">=2.8" },

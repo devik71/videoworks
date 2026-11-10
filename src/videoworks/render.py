@@ -15,7 +15,8 @@ from videoworks.models import Edl, Receipt
 
 
 def build_filtergraph(
-    edl: Edl, *, with_audio: bool = True, audio_plan: AudioPlan | None = None
+    edl: Edl, *, with_audio: bool = True, audio_plan: AudioPlan | None = None,
+    audio_input: int = 0, audio_origin: float = 0.0,
 ) -> str:
     """trim/atrim по кожному інтервалу + concat, далі ланцюг обробки звуку.
 
@@ -31,7 +32,9 @@ def build_filtergraph(
         parts.append(f"[0:v]trim={window},setpts=PTS-STARTPTS[v{index}]")
         labels.append(f"[v{index}]")
         if with_audio:
-            parts.append(f"[0:a]atrim={window},asetpts=PTS-STARTPTS[a{index}]")
+            audio_window = (f"start={segment.src_in - audio_origin:.6f}:"
+                            f"end={segment.src_out - audio_origin:.6f}")
+            parts.append(f"[{audio_input}:a]atrim={audio_window},asetpts=PTS-STARTPTS[a{index}]")
             labels.append(f"[a{index}]")
 
     count = len(edl.segments)
@@ -60,17 +63,40 @@ def cut(
     quality: int = 18,
     preset: str | None = None,
     source_duration: float | None = None,
+    audio_override: Path | None = None,
+    audio_origin: float = 0.0,
 ) -> tuple[Path, Receipt]:
     """Рендерить EDL. Кидає PreflightFailed, якщо план не пройшов перевірку."""
     problems = preflight(edl, source_duration=source_duration)
     if errors(problems):
         raise PreflightFailed(problems)
 
-    audio_plan = audio.plan(video, edl) if with_audio and edl.audio.normalize else None
+    if audio_override is not None:
+        from videoworks.ingest import duration_of, has_audio, probe
+
+        if not with_audio:
+            raise ValueError("Підмінена доріжка потребує with_audio=True")
+        override_probe = probe(audio_override)
+        if not has_audio(override_probe):
+            raise ValueError("У підміненій доріжці немає аудіо")
+        if any(s.src_in < audio_origin - 0.001 or
+               s.src_out - audio_origin > duration_of(override_probe) + 0.001
+               for s in edl.segments):
+            raise ValueError("Підмінена доріжка не покриває всі сегменти EDL")
+    elif audio_origin:
+        raise ValueError("audio_origin застосовується лише з audio_override")
+
+    meter_edl = edl.model_copy(update={"segments": [
+        s.model_copy(update={"src_in": s.src_in - audio_origin,
+                             "src_out": s.src_out - audio_origin}) for s in edl.segments
+    ]})
+    audio_plan = (audio.plan(audio_override or video, meter_edl)
+                  if with_audio and edl.audio.normalize else None)
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     graph_path = dest.with_suffix(".filtergraph.txt")
-    graph = build_filtergraph(edl, with_audio=with_audio, audio_plan=audio_plan)
+    graph = build_filtergraph(edl, with_audio=with_audio, audio_plan=audio_plan,
+                              audio_input=1 if audio_override else 0, audio_origin=audio_origin)
     graph_path.write_text(graph, encoding="utf-8")
 
     args = [
@@ -78,6 +104,10 @@ def cut(
         "-nostdin",
         "-y",
         "-i", str(video.resolve()),
+    ]
+    if audio_override:
+        args += ["-i", str(audio_override.resolve())]
+    args += [
         # Граф із сотень сегментів не влазить у командний рядок Windows,
         # тому передаємо його файлом. Стара опція -filter_complex_script
         # прибрана у ffmpeg 9, робоча форма саме така.
@@ -100,10 +130,16 @@ def cut(
     loudness = None
     if audio_plan:
         loudness = audio_plan.as_dict() | {"output": asdict(audio.measure_file(dest))}
+    if audio_override:
+        loudness = (loudness or {}) | {"override": str(audio_override), "origin": audio_origin}
+
+    inputs = {str(video): sha256(video)}
+    if audio_override:
+        inputs[str(audio_override)] = sha256(audio_override)
 
     receipt = Receipt(
         output=str(dest),
-        inputs={str(video): sha256(video)},
+        inputs=inputs,
         edl=edl.model_dump(),
         audio=loudness,
         tools={
