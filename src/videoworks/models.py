@@ -199,6 +199,55 @@ class Edl(BaseModel):
         return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
 
+class StruckWord(BaseModel):
+    """Слово транскрипту, викреслене людиною: його звук не має вийти в ефір."""
+
+    w: str
+    start: float = Field(ge=0, allow_inf_nan=False)
+    end: float = Field(ge=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        # Нульова довжина дозволена: ASR інколи дає слово з start == end.
+        if self.end < self.start:
+            raise ValueError(f"end {self.end} раніше за start {self.start}")
+        return self
+
+
+class ManualSpan(BaseModel):
+    """Відрізок, який людина виділила на таймлайні руками, поза словами."""
+
+    start: float = Field(ge=0, allow_inf_nan=False)
+    end: float = Field(ge=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        if self.end <= self.start:
+            raise ValueError(f"end {self.end} не пізніше за start {self.start}")
+        return self
+
+
+class Strikes(BaseModel):
+    """Викреслення: що людина позначила, і готові відрізки глушіння для рендера."""
+
+    source: str
+    transcript_sha256: str  # з яким транскриптом позначали; зсув тут означає застарілі мітки
+    pad: float = 0.15
+    merge_gap: float = 0.25
+    words: list[StruckWord] = Field(default_factory=list)
+    manual: list[ManualSpan] = Field(default_factory=list)
+    spans: list[tuple[float, float]] = Field(default_factory=list)  # похідне: рахує strikes.store
+
+    def save(self, path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+        return path
+
+    @classmethod
+    def load(cls, path: Path) -> Strikes:
+        return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
+
+
 class Receipt(BaseModel):
     """Провенанс вихідного файлу: з чого й чим зроблено."""
 

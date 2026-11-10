@@ -50,6 +50,10 @@ class Project:
         return self.root / "edl.json"
 
     @property
+    def strikes(self) -> Path:
+        return self.root / "strikes.json"
+
+    @property
     def cut_video(self) -> Path:
         return self.out / "cut.mp4"
 
