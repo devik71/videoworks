@@ -32,6 +32,14 @@ STATIC: dict[str, tuple[str, str]] = {
     "/player.js": ("player.js", "text/javascript; charset=utf-8"),
     "/sheet.js": ("sheet.js", "text/javascript; charset=utf-8"),
     "/sound.js": ("sound.js", "text/javascript; charset=utf-8"),
+    "/map.js": ("map.js", "text/javascript; charset=utf-8"),
+    "/manual.js": ("manual.js", "text/javascript; charset=utf-8"),
+    "/tour.js": ("tour.js", "text/javascript; charset=utf-8"),
+    "/help.js": ("help.js", "text/javascript; charset=utf-8"),
+    "/notes.js": ("notes.js", "text/javascript; charset=utf-8"),
+    "/saving.js": ("saving.js", "text/javascript; charset=utf-8"),
+    "/keys.js": ("keys.js", "text/javascript; charset=utf-8"),
+    "/memory.js": ("memory.js", "text/javascript; charset=utf-8"),
 }
 
 

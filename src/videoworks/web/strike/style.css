@@ -15,6 +15,7 @@
   --brush-wash: rgb(211 38 28 / 0.09);
   --rule: rgb(211 38 28 / 0.26);
   --shadow: rgb(70 52 24 / 0.2);
+  --veil: rgb(46 38 24 / 0.34);
   --stage: #171512;
 
   /* Зерно паперу: шум, зафарбований у коричневе й майже прозорий. */
@@ -31,6 +32,8 @@
   --gutter: 96px; /* поле ліворуч від тексту: там стоять позначки часу */
   --inset: 30px; /* від червоної лінії поля до тексту */
   --stick: 0px; /* скільки верху вікна зайнято приклеєним відео */
+  --under: 46px; /* смужка під відео: кнопка позначки без слів і підказка про тишу */
+  --map-w: 18px;
 }
 
 *,
@@ -63,7 +66,7 @@ body {
 .desk {
   flex: 1;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 14px;
+  grid-template-columns: auto minmax(0, 1fr) var(--map-w);
 }
 
 .stage {
@@ -71,8 +74,11 @@ body {
   top: 0;
   align-self: start;
   height: calc(100dvh - var(--bar-h));
-  /* Вертикальне відео займає всю висоту; ширше за 9:16 не дає зʼїсти аркуш. */
-  width: min(40vw, calc((100dvh - var(--bar-h)) * var(--ratio, 0.5625)));
+  display: flex;
+  flex-direction: column;
+  /* Вертикальне відео займає всю висоту, крім смужки під ним; ширше за 9:16 не дає
+     зʼїсти аркуш. */
+  width: min(40vw, calc((100dvh - var(--bar-h) - var(--under)) * var(--ratio, 0.5625)));
   /* Горизонтальне відео висоти не заповнює: під ним лишається папір, а не чорна панель. */
   background: var(--paper-shade);
   box-shadow: 6px 0 24px -12px var(--shadow);
@@ -80,11 +86,60 @@ body {
 
 .stage video {
   display: block;
+  flex: none;
   width: 100%;
-  height: 100%;
+  /* Висота — за пропорцією самого запису: смужка стає одразу під картинкою. */
+  aspect-ratio: var(--ratio, 0.5625);
+  max-height: calc(100% - var(--under));
   object-fit: contain;
   object-position: center top;
+  background: var(--stage);
   cursor: pointer;
+}
+
+/* Під відео — те, що стосується звуку: кнопка для місць без слів і чесне слово про
+   тишу. Дрібно й тихо: це примітка на полях, а не панель. */
+.under {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-height: var(--under);
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.silence {
+  margin: 0;
+  flex: 1 1 14em;
+}
+
+#blot {
+  flex: none;
+  padding: 4px 12px;
+  color: var(--brush);
+  border-color: var(--rule);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background-color 0.12s ease-out, color 0.12s ease-out, opacity 0.12s ease-out;
+}
+
+/* Поки відео стоїть, позначати нічого: кнопка відступає, але лишається на місці. */
+body:not(.playing) #blot {
+  opacity: 0.5;
+}
+
+#blot:hover {
+  background: var(--brush-wash);
+}
+
+body.holding #blot,
+body.holding #blot:hover {
+  background: var(--brush);
+  border-color: var(--brush);
+  color: var(--card);
 }
 
 #sheet {
@@ -108,8 +163,16 @@ body {
   top: var(--stick);
   align-self: start;
   height: calc(100dvh - var(--bar-h) - var(--stick));
-  background: var(--ink-wash);
+  /* Тло — той самий папір: говорити на мапі мають лише риски й червоне. */
   box-shadow: inset 1px 0 0 var(--hair);
+  cursor: pointer;
+}
+
+#chart {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* палець на мапі перемотує, а не гортає сторінку */
 }
 
 /* ---- аркуш ---- */
@@ -215,12 +278,69 @@ body {
   background: var(--hair);
 }
 
+/* Місце без слів: червона пляма-рядок між фразами. Клік — послухати, хрестик або
+   мазок — стерти. */
 .manual {
+  position: relative;
+  display: flex;
+  align-items: center;
   margin: 0.9em 0 0.9em -11px;
-  padding: 4px 13px 4px 11px;
   border-radius: 999px;
   color: var(--brush);
   background: var(--brush-wash);
+  transition: opacity 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+
+.manual button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  touch-action: none; /* палець на плямі — це пензель */
+}
+
+.manual-play {
+  padding: 4px 4px 4px 11px;
+  border-radius: 999px 0 0 999px;
+  letter-spacing: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.manual-x {
+  padding: 4px 11px 4px 6px;
+  border-radius: 0 999px 999px 0;
+  font-size: 10px;
+  line-height: 18px;
+  opacity: 0.5;
+  transition: opacity 0.12s ease-out;
+}
+
+.manual-x:hover,
+.manual-x:focus-visible {
+  opacity: 1;
+}
+
+.manual :focus-visible {
+  outline-color: var(--brush);
+}
+
+/* Рядок, який зараз слухають клавіші [ і ]. Підказка про них — поруч, пошепки. */
+.manual.on {
+  box-shadow: 0 0 0 1.5px var(--brush);
+}
+
+.manual.on::after {
+  content: "[ ] початок · Shift — кінець";
+  position: absolute;
+  left: calc(100% + 14px);
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--ink-far);
+  pointer-events: none;
+}
+
+.manual.going {
+  opacity: 0.3;
 }
 
 .quiet-state {
@@ -335,9 +455,22 @@ body {
   margin-left: auto;
 }
 
-#saved,
-#hint {
+#saved {
   color: var(--ink-soft);
+}
+
+/* Що відбувається просто зараз. Поки росте позначка — червоним, як вона сама. */
+#hint {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+body.holding #hint {
+  color: var(--brush);
+}
+
+.short {
+  display: none;
 }
 
 #saved.bad {
@@ -372,7 +505,7 @@ button {
 
 .round:hover:not(:disabled),
 .pill:hover:not(:disabled),
-.switch button[aria-checked="false"]:hover {
+.switch button[aria-pressed="false"]:hover {
   background: var(--ink-wash);
 }
 
@@ -433,9 +566,116 @@ body.playing .icon-play {
   color: var(--ink-soft);
 }
 
-.switch button[aria-checked="true"] {
+.switch button[aria-pressed="true"],
+#review[aria-pressed="true"],
+#review[aria-pressed="true"]:hover {
   background: var(--ink);
+  border-color: transparent;
   color: var(--paper);
+}
+
+#sound[aria-pressed="true"] .sound-off,
+#sound[aria-pressed="false"] .sound-on {
+  display: none;
+}
+
+#sound[aria-pressed="false"] {
+  color: var(--ink-far);
+}
+
+/* ---- довідка ---- */
+
+/* Паперова картка поверх аркуша. Затемнення — тінь самої картки: так воно бере
+   колір із тих самих токенів, що й усе інше. */
+#keys {
+  width: min(31rem, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--card) var(--grain);
+  color: var(--ink);
+  box-shadow: 0 0 0 100vmax var(--veil), 0 28px 60px -24px var(--shadow);
+  overflow: auto;
+}
+
+#keys[open] {
+  animation: rise 0.16s ease-out;
+}
+
+#keys::backdrop {
+  background: transparent;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.card {
+  padding: 26px 30px 24px;
+  border-left: 1px solid var(--rule);
+  margin-left: 22px;
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font: 600 12px/1.3 var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.card .how {
+  margin: 0 0 16px;
+  font: 17px/1.5 var(--serif);
+}
+
+.card dl {
+  margin: 0 0 16px;
+}
+
+.card dl div {
+  display: grid;
+  grid-template-columns: 10.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.card dt i {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.card dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+kbd {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--hair);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--paper);
+  font: 12px/1.5 var(--mono);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.card dd kbd {
+  margin: 0 2px;
+}
+
+.card .fine {
+  margin: 0 0 18px;
+  font-size: 12px;
+  color: var(--ink-soft);
 }
 
 button:disabled {
@@ -458,7 +698,7 @@ button:disabled {
   }
 
   .desk {
-    grid-template-columns: minmax(0, 1fr) 14px;
+    grid-template-columns: minmax(0, 1fr) var(--map-w);
   }
 
   /* Відео й аркуш ділять одну клітинку: приклеєне тримається лише в межах своєї
@@ -473,7 +713,16 @@ button:disabled {
   }
 
   .stage video {
+    flex: 1 1 0;
+    min-height: 0;
+    aspect-ratio: auto;
+    max-height: none;
     object-position: center;
+  }
+
+  .under {
+    background: var(--card);
+    padding: 6px 10px;
   }
 
   #sheet {
@@ -499,11 +748,65 @@ button:disabled {
     padding: 0 10px;
   }
 
-  /* Рядок один і не переноситься: що не влазить — поступається лічильнику й стану. */
+  /* Рядок один і не переноситься: що не влазить — коротшає або поступається. */
   .clock,
-  #hint,
-  #review {
+  .long,
+  .lead,
+  .manual.on::after {
     display: none;
+  }
+
+  .short {
+    display: inline;
+  }
+
+  .steps,
+  .tail {
+    gap: 4px;
+  }
+
+  .switch button {
+    padding: 4px 9px;
+  }
+
+  .pill {
+    padding: 5px 11px;
+  }
+
+  /* Поки є що сказати просто зараз, лічильник і стан запису чекають. */
+  #bar.busy #count,
+  #bar.busy #saved,
+  #bar.unsaved #count {
+    display: none;
+  }
+
+  /* «Збережено» й «зберігаю…» тут — значок: слова лишаються для читача з екрана,
+     а місце в рядку дістається лічильнику. Біда пишеться словами. */
+  #saved[data-state="ok"],
+  #saved[data-state="busy"] {
+    font-size: 0;
+  }
+
+  #saved[data-state="ok"]::before,
+  #saved[data-state="busy"]:not(:empty)::before {
+    font-size: 13px;
+  }
+
+  #saved[data-state="ok"]::before {
+    content: "✓";
+  }
+
+  #saved[data-state="busy"]:not(:empty)::before {
+    content: "…";
+  }
+
+  .card {
+    padding: 20px 20px 18px;
+    margin-left: 12px;
+  }
+
+  .card dl div {
+    grid-template-columns: 8.5rem minmax(0, 1fr);
   }
 }
 

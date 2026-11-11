@@ -12,7 +12,22 @@ from videoworks.strike_server import STATIC
 
 WEB = Path(videoworks.__file__).parent / "web" / "strike"
 TESTS = Path(__file__).parent
-SCRIPTS = ["app.js", "logic.js", "brush.js", "player.js", "sheet.js", "sound.js"]
+SCRIPTS = [
+    "app.js",
+    "logic.js",
+    "brush.js",
+    "player.js",
+    "sheet.js",
+    "sound.js",
+    "map.js",
+    "manual.js",
+    "tour.js",
+    "help.js",
+    "notes.js",
+    "saving.js",
+    "keys.js",
+    "memory.js",
+]
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="немає node")
 
 
@@ -26,7 +41,6 @@ def run_node(*args: str) -> None:
 @needs_node
 @pytest.mark.parametrize("name", SCRIPTS)
 def test_script_parses(name):
-    # Порожні заглушки теж мають проходити: пізніші завдання наповнюють їх по черзі.
     run_node("--check", str(WEB / name))
 
 
@@ -100,3 +114,40 @@ def test_page_text_is_ukrainian_and_has_no_placeholder_copy():
         text = (WEB / name).read_text("utf-8")
         for junk in ("Lorem", "TODO", "FIXME"):
             assert junk not in text, f"{name}: {junk}"
+
+
+def test_help_lists_every_shortcut_from_the_spec():
+    html = (WEB / "index.html").read_text("utf-8")
+    for key in ("Пробіл", "←", "→", "X", "B", "Ctrl+Z", "N", "M", "?", "[", "]", "Esc"):
+        assert f"<kbd>{key}</kbd>" in html, key
+
+
+def test_page_says_that_struck_places_are_silent_here():
+    html = (WEB / "index.html").read_text("utf-8")
+    assert "Тут на викресленому тиша. У готовому відео буде чиста музика" in html
+
+
+def test_mode_switch_is_a_pair_of_toggle_buttons():
+    # radiogroup обіцяє стрілки всередині групи, а стрілки на цій сторінці ходять фразами.
+    html = (WEB / "index.html").read_text("utf-8")
+    assert "radiogroup" not in html and 'role="radio"' not in html
+    assert html.count("aria-pressed=") >= 2
+
+
+@pytest.mark.parametrize("name", SCRIPTS)
+def test_script_lines_fit_the_page(name):
+    for number, line in enumerate((WEB / name).read_text("utf-8").splitlines(), 1):
+        assert len(line) <= 100, f"{name}:{number}"
+
+
+def test_map_takes_its_colours_from_the_tokens():
+    source = (WEB / "map.js").read_text("utf-8")
+    assert "getComputedStyle" in source
+    assert not re.search(r"#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(", source)
+
+
+def test_sound_shares_the_players_audio_context():
+    # Другий AudioContext — це другий пристрій виводу й окремий дозвіл браузера.
+    made = [name for name in SCRIPTS if "AudioContext(" in (WEB / name).read_text("utf-8")]
+    assert made in ([], ["player.js"]), made
+    assert "new Context()" in (WEB / "player.js").read_text("utf-8")

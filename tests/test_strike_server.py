@@ -85,6 +85,14 @@ def test_static_files_are_served_with_their_types(server) -> None:
         "/player.js": "text/javascript; charset=utf-8",
         "/sheet.js": "text/javascript; charset=utf-8",
         "/sound.js": "text/javascript; charset=utf-8",
+        "/map.js": "text/javascript; charset=utf-8",
+        "/manual.js": "text/javascript; charset=utf-8",
+        "/tour.js": "text/javascript; charset=utf-8",
+        "/help.js": "text/javascript; charset=utf-8",
+        "/notes.js": "text/javascript; charset=utf-8",
+        "/saving.js": "text/javascript; charset=utf-8",
+        "/keys.js": "text/javascript; charset=utf-8",
+        "/memory.js": "text/javascript; charset=utf-8",
     }
     assert {route: kind for route, (_, kind) in STATIC.items()} == expected
     for route, kind in expected.items():

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   gestureMode, fill, applyGesture, isStroke, runs, seed, strokePath, isMuted, nextEdge,
   phraseAt, manualFromHold, nudge, removeManualAt, reviewStops, History, Outbox,
+  squeakPitch, plural,
 } from "../src/videoworks/web/strike/logic.js";
 
 const S1 = { struck: [1, 2], manual: [] };
@@ -259,4 +260,75 @@ test("Outbox несе відбиток основи, але порівнює з�
   o.markSent({ ...S1, transcript: "t", stamp: "whatever" });
   assert.equal(o.pending, false);
   assert.equal(new Outbox(storage, "k").restore(), null);
+});
+
+test("писк піднімається з кожним словом і не виходить за межі", () => {
+  assert.ok(squeakPitch(1, 0.5) > squeakPitch(0, 0.5));
+  assert.ok(squeakPitch(40, 9) <= 2400 && squeakPitch(0, 0) >= 400);
+});
+
+test("писк: швидший рух вищий, а після чотирнадцятого слова висота вже не росте", () => {
+  assert.ok(squeakPitch(3, 1.5) > squeakPitch(3, 0.2));
+  assert.equal(squeakPitch(14, 1), squeakPitch(30, 1));
+  assert.equal(squeakPitch(2, 2), squeakPitch(2, 7));
+  assert.ok(Math.abs(squeakPitch(0, 0) - 442) < 1e-9); // 520 × 0.85
+  // Сміття на вході не повинно дійти до осцилятора: NaN у частоті кидає виняток.
+  assert.ok(Number.isFinite(squeakPitch(NaN, NaN)));
+  assert.ok(Number.isFinite(squeakPitch(-5, -1)) && squeakPitch(-5, -1) >= 400);
+});
+
+test("відмінювання: 1 слово, 2 слова, 5 слів, 11 слів, 21 слово", () => {
+  const forms = ["слово", "слова", "слів"];
+  assert.equal(plural(1, forms), "слово");
+  assert.equal(plural(2, forms), "слова");
+  assert.equal(plural(4, forms), "слова");
+  assert.equal(plural(5, forms), "слів");
+  assert.equal(plural(0, forms), "слів");
+  assert.equal(plural(11, forms), "слів");
+  assert.equal(plural(12, forms), "слів");
+  assert.equal(plural(14, forms), "слів");
+  assert.equal(plural(21, forms), "слово");
+  assert.equal(plural(22, forms), "слова");
+  assert.equal(plural(111, forms), "слів");
+  assert.equal(plural(112, forms), "слів");
+  assert.equal(plural(101, forms), "слово");
+});
+
+test("nudge: відрізок, коротший за мінімум, не виходить за запис", () => {
+  // Такі відрізки приходять із позначок, перенесених зі старої розшифровки.
+  assert.deepEqual(nudge([0, 0.05], "start", -0.1, 10), [0, 0.05]);
+  assert.deepEqual(nudge([0, 0.05], "start", 0.1, 10), [0, 0.05]);
+  assert.deepEqual(nudge([0.02, 0.07], "start", 0.1, 10), [0.02, 0.07]);
+  assert.deepEqual(nudge([0.02, 0.07], "start", -0.1, 10), [0, 0.07]);
+  assert.deepEqual(nudge([0.02, 0.07], "end", 0.1, 10), [0.02, 0.17]);
+  assert.deepEqual(nudge([9.95, 10], "end", 0.1, 10), [9.95, 10]);
+  assert.deepEqual(nudge([9.95, 10], "end", -0.1, 10), [9.95, 10]);
+  for (const edge of ["start", "end"]) {
+    for (const delta of [-0.1, 0.1]) {
+      for (const span of [[0, 0.05], [9.95, 10], [0.1, 0.15], [5, 5.05]]) {
+        const [s, e] = nudge(span, edge, delta, 10);
+        assert.ok(s >= 0 && e <= 10 && s <= e, `${span} ${edge} ${delta} -> ${s}, ${e}`);
+      }
+    }
+  }
+});
+
+test("History.amend переписує останній крок, а не додає новий", () => {
+  const h = new History(S1);
+  h.push(S2);
+  h.amend(S3);
+  assert.deepEqual(h.undo(), S1);
+  assert.deepEqual(h.redo(), S3);
+  assert.equal(h.canRedo, false);
+});
+
+test("History.amend: крок, що повернувся до попереднього стану, зникає", () => {
+  const h = new History(S1);
+  h.push(S2);
+  h.amend(S1);
+  assert.equal(h.canUndo, false);
+  assert.equal(h.canRedo, false);
+  // Без попереднього кроку переписувати нічого — це звичайний новий крок.
+  h.amend(S2);
+  assert.deepEqual(h.undo(), S1);
 });

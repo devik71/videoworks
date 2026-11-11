@@ -21,36 +21,46 @@ const painted = new WeakMap();
 
 // handlers:
 //   wordAt(x, y) -> number | null   слово під точкою вікна
+//   blotAt(x, y) -> number | null   відрізок без слів під точкою (необовʼязково)
 //   struck() -> Set                 викреслене до жесту: за ним визначається режим
 //   blank: Set                      порожні слова, яких пензель не бере
-//   onPreview(touched, mode)        жест триває: показати, що вийде
-//   onGesture(touched, mode)        жест завершено: записати
+//   onPreview(touched, mode, blots) жест триває: показати, що вийде
+//   onGesture(touched, mode, blots) жест завершено: записати
 //   onCancel()                      жест зірвався: повернути, як було
-//   onClick(index)                  натиск без руху
-//   onStep(index, speed)            пензель зайшов на нове слово; швидкість у px/мс
+//   onClick(index)                  натиск на слові без руху
+//   onStep(index, speed, step, mode)  пензель зайшов на нове слово: швидкість у
+//                                   px/мс і котре це слово в жесті, від нуля
+// blots — номери відрізків без слів, які жест стирає. Такий рядок — теж викреслене:
+// жест, що почався на ньому, стирає, а мазок-викреслення, що йде повз, його не чіпає.
 export function attach(root, handlers) {
   const blank = handlers.blank || new Set();
+  const blotAt = handlers.blotAt || (() => null);
   let gesture = null;
+  let swallow = -1; // час жесту, після якого клік під вказівником уже не клік
 
   root.addEventListener("pointerdown", (event) => {
     if (gesture || (event.pointerType === "mouse" && event.button !== 0)) return;
     const index = handlers.wordAt(event.clientX, event.clientY);
-    if (index === null) return;
+    const blot = index === null ? blotAt(event.clientX, event.clientY) : null;
+    if (index === null && blot === null) return;
     gesture = {
       pointer: event.pointerId,
       x: event.clientX,
       y: event.clientY,
       first: index,
+      blot,
       last: index,
       touched: null, // стає списком, коли рух уже точно мазок, а не клік
       seen: new Set(),
+      blots: [],
       mode: null,
       at: event.timeStamp,
       px: event.clientX,
       py: event.clientY,
     };
-    // Вказівник може вийти за аркуш — жест від цього не повинен обірватись.
-    root.setPointerCapture(event.pointerId);
+    // Вказівник може вийти за аркуш — жест від цього не повинен обірватись. На рядку
+    // без слів захоплюємо лише з початком мазка: інакше його кнопка не почула б кліку.
+    if (index !== null) root.setPointerCapture(event.pointerId);
   });
 
   root.addEventListener("pointermove", (event) => {
@@ -69,22 +79,31 @@ export function attach(root, handlers) {
       g.seen.add(i);
       g.touched.push(i);
       changed = true;
-      if (handlers.onStep) handlers.onStep(i, speed);
+      if (handlers.onStep) handlers.onStep(i, speed, g.touched.length - 1, g.mode);
+    };
+    const wipe = (m) => {
+      if (m === null || g.blots.includes(m)) return;
+      g.blots.push(m);
+      changed = true;
     };
 
     if (!g.touched) {
       const crossed = index !== null && index !== g.first;
       if (!isStroke(event.clientX - g.x, event.clientY - g.y, crossed)) return;
-      g.mode = gestureMode(handlers.struck(), g.first);
+      g.mode = g.first === null ? "erase" : gestureMode(handlers.struck(), g.first);
       g.touched = [];
       root.classList.add("brushing");
-      take(g.first);
+      if (g.first === null) {
+        root.setPointerCapture(g.pointer);
+        wipe(g.blot);
+      } else take(g.first);
     }
     if (index !== null && index !== g.last) {
       for (const i of fill(g.last, index, blank)) take(i);
       g.last = index;
     }
-    if (changed) handlers.onPreview(g.touched, g.mode);
+    if (g.mode === "erase" && index === null) wipe(blotAt(event.clientX, event.clientY));
+    if (changed) handlers.onPreview(g.touched, g.mode, g.blots);
   });
 
   const finish = (event, completed) => {
@@ -94,9 +113,10 @@ export function attach(root, handlers) {
     root.classList.remove("brushing");
     if (root.hasPointerCapture(g.pointer)) root.releasePointerCapture(g.pointer);
     if (!g.touched) {
-      if (completed) handlers.onClick(g.first);
+      if (completed && g.first !== null) handlers.onClick(g.first);
     } else if (completed) {
-      handlers.onGesture(g.touched, g.mode);
+      swallow = event.timeStamp;
+      handlers.onGesture(g.touched, g.mode, g.blots);
     } else {
       handlers.onCancel();
     }
@@ -104,6 +124,17 @@ export function attach(root, handlers) {
 
   root.addEventListener("pointerup", (event) => finish(event, true));
   root.addEventListener("pointercancel", (event) => finish(event, false));
+  // Захоплення можуть забрати без жодної іншої події (вкладку сховали, системний
+  // жест): без цього лишився б жест-привид, що чекає відпускання, якого не буде.
+  // Після звичайного відпускання жесту вже немає, і ця подія нічого не робить.
+  root.addEventListener("lostpointercapture", (event) => finish(event, false));
+  // Мазок, що скінчився над кнопкою, — не натискання на неї.
+  root.addEventListener("click", (event) => {
+    if (swallow < 0 || event.timeStamp - swallow > 80 || event.detail === 0) return;
+    swallow = -1;
+    event.stopPropagation();
+    event.preventDefault();
+  }, true);
 }
 
 // ---- фарба ----
@@ -116,7 +147,8 @@ function inset(left, right) {
 // куди пензель щойно дійшов.
 function grow(el, hidden, fromRight) {
   const from = fromRight ? inset(hidden, -SLACK) : inset(-SLACK, hidden);
-  el.animate({ clipPath: [from, inset(-SLACK, -SLACK)] }, { duration: GROW_MS, easing: "ease-out" });
+  const open = inset(-SLACK, -SLACK);
+  el.animate({ clipPath: [from, open] }, { duration: GROW_MS, easing: "ease-out" });
 }
 
 function fade(el) {
@@ -134,8 +166,9 @@ function chance(index, k) {
 function splash(svg, box, index) {
   for (let k = 0; k < 3; k++) {
     const drop = document.createElementNS(NS, "circle");
+    const cy = box.y + box.h * (0.15 + 0.7 * chance(index, k + 3));
     drop.setAttribute("cx", String(Math.round(box.x - 2 + chance(index, k) * 10)));
-    drop.setAttribute("cy", String(Math.round(box.y + box.h * (0.15 + 0.7 * chance(index, k + 3)))));
+    drop.setAttribute("cy", String(Math.round(cy)));
     drop.setAttribute("r", (1.4 + 2 * chance(index, k + 6)).toFixed(1));
     svg.append(drop);
     const dx = -(6 + 14 * chance(index, k + 9));

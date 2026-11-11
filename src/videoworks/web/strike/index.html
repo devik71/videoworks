@@ -14,6 +14,14 @@
   <aside class="stage">
     <!-- Адресу відео ставить скрипт: спершу мусить стати на місце слухач помилки. -->
     <video id="video" preload="metadata" playsinline aria-label="Запис заняття"></video>
+    <div class="under">
+      <!-- Те саме, що клавіша B. З клавіатури сюди не ходять: для неї є сама клавіша. -->
+      <button type="button" class="pill" id="blot" tabindex="-1"
+              title="Тримай, поки грає відео, — заглушиш місце, якого немає в тексті. Клавіша B">
+        <span aria-hidden="true">♪</span> тримай, де без слів
+      </button>
+      <p class="silence">Тут на викресленому тиша. У готовому відео буде чиста музика.</p>
+    </div>
   </aside>
 
   <section id="sheet" tabindex="0" aria-label="Текст заняття">
@@ -23,8 +31,10 @@
     </div>
   </section>
 
-  <!-- Мапа заняття: місце вже зайняте, малювання додає наступний крок. -->
-  <div id="map" aria-hidden="true"></div>
+  <!-- Мапа — для ока й миші; з клавіатури по позначках ходять N і стрілки. -->
+  <div id="map" aria-hidden="true" title="Усе заняття згори донизу. Клацни — перемотаєш">
+    <canvas id="chart"></canvas>
+  </div>
 </main>
 
 <footer id="bar">
@@ -33,10 +43,11 @@
     <svg class="icon icon-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3.2v11h-3.2zM9.3 2.5h3.2v11h-3.2z"/></svg>
   </button>
 
-  <div class="switch" id="mode" role="radiogroup" aria-label="Як грати">
-    <button type="button" role="radio" data-mode="phrase" aria-checked="true"
+  <!-- Дві кнопки-перемикачі, а не радіогрупа: стрілки на цій сторінці ходять фразами. -->
+  <div class="switch" id="mode" role="group" aria-label="Як грати">
+    <button type="button" data-mode="phrase" aria-pressed="true"
             title="Фраза звучить і спиняється — стрілки ведуть далі">по фразах</button>
-    <button type="button" role="radio" data-mode="flow" aria-checked="false"
+    <button type="button" data-mode="flow" aria-pressed="false"
             title="Запис грає без зупинок">підряд</button>
   </div>
 
@@ -53,13 +64,46 @@
 
   <span id="count"></span>
   <span id="saved" aria-live="polite"></span>
-  <span id="hint"></span>
+  <span id="hint" aria-live="polite"></span>
 
   <span class="tail">
-    <button type="button" class="pill" id="review" disabled>перевірити викреслене</button>
-    <button type="button" class="round" id="help" disabled aria-label="Довідка по клавішах">?</button>
+    <button type="button" class="pill" id="review" disabled aria-pressed="false"
+            title="Послухати кожне викреслене місце разом із тим, що довкола">
+      <span class="long">перевірити викреслене</span><span class="short">перевірити</span>
+    </button>
+    <button type="button" class="round" id="sound" aria-pressed="true" aria-label="Звук пензля ввімкнено"
+            title="Звук пензля — M">
+      <svg class="icon line" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M2.5 6.2h2.3L8 3.5v9L4.8 9.8H2.5z"/>
+        <path class="sound-on" d="M10.6 5.8a3 3 0 0 1 0 4.4M12.4 4a5.6 5.6 0 0 1 0 8"/>
+        <path class="sound-off" d="m10.8 6 3.4 4M14.2 6l-3.4 4"/>
+      </svg>
+    </button>
+    <button type="button" class="round" id="help" aria-label="Довідка по клавішах" title="Клавіші — ?">?</button>
   </span>
 </footer>
+
+<dialog id="keys" aria-labelledby="keys-title">
+  <div class="card">
+    <h2 id="keys-title">Як тут працювати</h2>
+    <p class="how">Веди пензлем по словах, яких не має бути в ефірі. Почнеш із викресленого —
+      зітреш. Клацнеш слово — почуєш його.</p>
+    <dl>
+      <div><dt><kbd>Пробіл</kbd></dt><dd>грати або повторити фразу</dd></div>
+      <div><dt><kbd>←</kbd><kbd>→</kbd></dt><dd>попередня й наступна фраза</dd></div>
+      <div><dt><kbd>X</kbd></dt><dd>викреслити або відновити всю фразу</dd></div>
+      <div><dt><kbd>Ctrl+Z</kbd><kbd>Ctrl+Shift+Z</kbd></dt><dd>скасувати й повернути мазок</dd></div>
+      <div><dt><kbd>B</kbd><i>тримати</i></dt><dd>заглушити місце без слів, поки грає відео</dd></div>
+      <div><dt><kbd>[</kbd><kbd>]</kbd></dt><dd>посунути початок такого місця, із <kbd>Shift</kbd> — кінець</dd></div>
+      <div><dt><kbd>N</kbd><kbd>Shift+N</kbd></dt><dd>наступна й попередня позначка</dd></div>
+      <div><dt><kbd>M</kbd></dt><dd>звук пензля</dd></div>
+      <div><dt><kbd>?</kbd></dt><dd>ця підказка</dd></div>
+      <div><dt><kbd>Esc</kbd></dt><dd>закрити підказку, спинити перевірку</dd></div>
+    </dl>
+    <p class="fine">Усе зберігається само. Тут на викресленому тиша, а в готовому відео буде музика.</p>
+    <button type="button" class="pill" data-close>зрозуміло</button>
+  </div>
+</dialog>
 
 <script type="module" src="/app.js"></script>
 </body>

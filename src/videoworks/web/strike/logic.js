@@ -181,12 +181,17 @@ export function manualFromHold(pressed, released, duration) {
 }
 
 // Рухома межа зупиняється, коли відрізок стає завузьким, і не виходить за запис.
+// Відрізок, уже коротший за мінімум (такі приходять зі старої розшифровки), можна
+// лише розширювати. Межі запису застосовуємо останніми — інакше саме такий
+// короткий відрізок виштовхнуло б за нуль чи за кінець.
 export function nudge(span, edge, delta, duration) {
   const [start, end] = span;
   if (edge === "start") {
-    return [r3(Math.min(Math.max(start + delta, 0), end - MIN_MANUAL)), r3(end)];
+    const cap = Math.max(end - MIN_MANUAL, Math.min(start, end));
+    return [r3(Math.max(Math.min(start + delta, cap), 0)), r3(end)];
   }
-  return [r3(start), r3(Math.max(Math.min(end + delta, duration), start + MIN_MANUAL))];
+  const floor = Math.min(start + MIN_MANUAL, Math.max(start, end));
+  return [r3(start), r3(Math.min(Math.max(end + delta, floor), duration))];
 }
 
 export function removeManualAt(manual, index) {
@@ -204,6 +209,28 @@ export function reviewStops(spans, duration) {
     else out.push([from, to]);
   }
   return out;
+}
+
+// ---- звук пензля й слова для чисел ----
+
+// Висота писку: з кожним словом у жесті на півтон вище (довгий мазок звучить як
+// глісандо), швидший рух — дзвінкіше. Стеля в 14 слів і межі 400…2400 Гц тримають
+// звук у смузі, де він смішний, а не пронизливий. Сміття на вході дає найнижчу ноту.
+export function squeakPitch(step, speed) {
+  const word = Math.min(Math.max(Number(step) || 0, 0), 14);
+  const rush = Math.min(Math.max(Number(speed) || 0, 0), 2);
+  const pitch = 520 * 2 ** (word / 12) * (0.85 + rush * 0.2);
+  return Math.min(Math.max(pitch, 400), 2400);
+}
+
+// Українське відмінювання за числом: forms = [1 слово, 2 слова, 5 слів].
+export function plural(n, forms) {
+  const whole = Math.abs(Math.trunc(n));
+  const unit = whole % 10;
+  const tens = whole % 100;
+  if (unit === 1 && tens !== 11) return forms[0];
+  if (unit >= 2 && unit <= 4 && (tens < 12 || tens > 14)) return forms[1];
+  return forms[2];
 }
 
 // ---- історія й черга відправки ----
@@ -224,6 +251,21 @@ export class History {
     this.items.push(copyOf(snapshot));
     if (this.items.length > HISTORY_LIMIT) this.items.shift();
     this.at = this.items.length - 1;
+  }
+
+  // Серія дрібних правок одного й того самого (підсування межі клавішею) — один
+  // крок: останній знімок переписуємо. Якщо серія повернулась туди, звідки
+  // почалась, крок зникає зовсім — скасовувати порожнє нема чого.
+  amend(snapshot) {
+    if (this.at === 0) {
+      this.push(snapshot);
+      return;
+    }
+    this.items.length = this.at + 1;
+    if (keyOf(snapshot) === keyOf(this.items[this.at - 1])) {
+      this.items.pop();
+      this.at -= 1;
+    } else this.items[this.at] = copyOf(snapshot);
   }
 
   undo() {

@@ -27,10 +27,21 @@ export function createPlayer(video, { spans, onTick, onChange }) {
       gain = node;
       // Заглушений елемент віддає в граф тишу, і жодна гучність її вже не підніме.
       video.muted = false;
-      hushed = null;
+      snap(video.currentTime);
     } catch {
       plain = true;
     }
+  }
+
+  // Гучність одразу, без рампи: відтворення починається з місця t, і якщо воно
+  // у викресленому, до першого кадру не має просочитись ані звуку. Рампа потрібна
+  // межі, на яку головка наїжджає сама; стрибок головки — це й так розрив звуку.
+  function snap(t) {
+    if (!gain) return;
+    hushed = isMuted(spans(), t + LOOKAHEAD);
+    gain.gain.cancelScheduledValues(context.currentTime);
+    // Пряме присвоєння діє негайно навіть тоді, коли контекст іще не прокинувся.
+    gain.gain.value = hushed ? 0 : 1;
   }
 
   function hush(t) {
@@ -63,7 +74,14 @@ export function createPlayer(video, { spans, onTick, onChange }) {
     onChange(true);
   });
   video.addEventListener("pause", () => onChange(false));
-  video.addEventListener("ended", () => onChange(false));
+  video.addEventListener("ended", () => {
+    onChange(false);
+    // Запис скінчився раніше за замовлену зупинку — для того, хто чекав, це вона й є.
+    if (stopAt !== null) {
+      stopAt = null;
+      onTick(video.currentTime, true);
+    }
+  });
   // Перемотування на паузі кадрів не дає, а слово під головкою показати треба.
   video.addEventListener("seeked", () => {
     if (!video.paused) return;
@@ -71,13 +89,26 @@ export function createPlayer(video, { spans, onTick, onChange }) {
     onTick(video.currentTime, false);
   });
 
+  function wake() {
+    wire();
+    if (context && context.state === "suspended") context.resume().catch(() => {});
+  }
+
   return {
+    // Той самий контекст для звуку пензля: другого на сторінці не буде. Кликати лише
+    // з жесту людини — раніше браузер звуку не дасть. null — WebAudio недоступний.
+    audio() {
+      wake();
+      return context;
+    },
     // from === null — грати з того місця, де стоїть; to === null — не спинятись.
     play(from, to = null) {
-      wire();
-      if (context && context.state === "suspended") context.resume().catch(() => {});
+      wake();
       stopAt = to;
-      if (from !== null) video.currentTime = Math.max(0, from);
+      if (from !== null) {
+        video.currentTime = Math.max(0, from);
+        snap(Math.max(0, from));
+      }
       const started = video.play();
       // Відео, якого браузер не вміє, відхиляє обіцянку; про це вже каже плашка.
       if (started) started.catch(() => {});
@@ -88,6 +119,14 @@ export function createPlayer(video, { spans, onTick, onChange }) {
     // Перемикання режиму посеред фрази: знімає або ставить зупинку, не чіпаючи звук.
     until(to) {
       stopAt = to;
+    },
+    // Перемотування без зміни «грає чи стоїть»: мапа тягне головку.
+    seek(t, to = null) {
+      stopAt = to;
+      video.currentTime = Math.max(0, t);
+    },
+    get time() {
+      return video.currentTime;
     },
     get playing() {
       return !video.paused && !video.ended;

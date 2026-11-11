@@ -24,6 +24,10 @@ export const sheet = {
   blank: new Set(), // порожні слова: їх не видно й не викреслити
 };
 
+// Рядки аркуша, що не міняються (фрази й музичні паузи), за часом: між ними
+// шукають своє місце відрізки без слів.
+let fixed = []; // { at, el }
+
 let shown = new Set(); // що намальовано: стан або стан із жестом, який ще триває
 let watcher = null;
 
@@ -79,10 +83,16 @@ export function build(data) {
   const rows = make("div", "rows");
   rows.id = "rows";
 
+  fixed = [];
   const gaps = data.gaps.slice();
-  const gapRow = ([from, to]) => make("div", "gap", `♪ ${clock(from)} – ${clock(to)}`);
+  const gapRow = ([from, to]) => {
+    const el = make("div", "gap", `♪ ${clock(from)} – ${clock(to)}`);
+    fixed.push({ at: from, el });
+    return el;
+  };
   data.phrases.forEach((phrase, p) => {
     while (gaps.length && gaps[0][0] < phrase.start) rows.append(gapRow(gaps.shift()));
+    fixed.push({ at: phrase.start, el: null });
     const el = make("p", "phrase");
     el.dataset.p = String(p);
     el.dataset.t = clock(phrase.start);
@@ -96,6 +106,7 @@ export function build(data) {
       el.append(span);
     }
     rows.append(el);
+    fixed[fixed.length - 1].el = el;
     sheet.phrases.push({ ...phrase, el, svg: null, geo: null, seen: false });
   });
   for (const gap of gaps) rows.append(gapRow(gap));
@@ -116,19 +127,41 @@ export function build(data) {
   for (const phrase of sheet.phrases) watcher.observe(phrase.el);
 }
 
-// Відрізки без слів стоять на своєму місці в часі, між фразами.
-export function showManual(manual) {
+// Відрізки без слів стоять на своєму місці в часі: перед першим рядком, що
+// починається пізніше. Пауза, в якій відрізок лежить, почалась раніше — тож він
+// стає під її рядком, а не над ним. Порядок у списку manual значення не має:
+// номер у data-m — це місце в списку, а місце на аркуші визначає час.
+// focused — номер відрізка, з яким зараз працюють клавіші [ і ].
+export function showManual(manual, focused = -1) {
   const rows = document.getElementById("rows");
   if (!rows) return;
+  // Перемальовування не має забирати фокус у того, хто йде аркушем із клавіатури.
+  const held = rows.contains(document.activeElement)
+    && document.activeElement.closest(".manual") !== null;
   for (const old of rows.querySelectorAll(".manual")) old.remove();
-  manual.forEach(([from, to], m) => {
-    const row = make("div", "manual", `♪ без слів · ${(to - from).toFixed(1)} с`);
+  const order = manual.map((_, m) => m).sort((a, b) => manual[a][0] - manual[b][0]);
+  for (const m of order) {
+    const [from, to] = manual[m];
+    const row = make("div", m === focused ? "manual on" : "manual");
     row.dataset.m = String(m);
-    row.title = `${clock(from)} – ${clock(to)}`;
-    const next = sheet.phrases.find((phrase) => phrase.start >= from);
+    const play = make("button", "manual-play", `♪ без слів · ${(to - from).toFixed(1)} с`);
+    play.type = "button";
+    play.title = `${clock(from)} – ${clock(to)} · клацни, щоб послухати`;
+    const drop = make("button", "manual-x", "✕");
+    drop.type = "button";
+    drop.title = "Стерти цю позначку";
+    drop.setAttribute("aria-label", "Стерти позначку без слів");
+    row.append(play, drop);
+    const next = fixed.find((item) => item.at > from);
     if (next) next.el.before(row);
     else rows.append(row);
-  });
+    if (held && m === focused) play.focus({ preventScroll: true });
+  }
+}
+
+// Рядок відрізка без слів за його номером у списку.
+export function manualRow(m) {
+  return document.querySelector(`#rows .manual[data-m="${m}"]`);
 }
 
 // ---- фарба ----
@@ -179,6 +212,24 @@ export function show(struck, { quiet = false } = {}) {
   for (const phrase of sheet.phrases) if (phrase.seen) paintPhrase(phrase, quiet);
 }
 
+// Чи накрив жест хоч одну фразу цілком (із двох і більше слів): тоді це вже не
+// мазок по слову, а викреслена думка, і звучить вона інакше.
+export function wholePhrase(touched) {
+  const got = new Set(touched);
+  for (const p of new Set(touched.map((i) => sheet.phraseOf[i]))) {
+    const phrase = sheet.phrases[p];
+    let words = 0;
+    let whole = true;
+    for (let i = phrase.first; i < phrase.first + phrase.count && whole; i++) {
+      if (!sheet.wordEls[i]) continue;
+      words += 1;
+      whole = got.has(i);
+    }
+    if (whole && words >= 2) return true;
+  }
+  return false;
+}
+
 // Ширина аркуша змінилась — слова переїхали на інші рядки, старі заміри брешуть.
 let pageWidth = 0;
 new ResizeObserver(([entry]) => {
@@ -213,7 +264,8 @@ function glide(top, instant) {
   glideId = requestAnimationFrame(step);
 }
 
-// Ставить фразу на рівень очей — у верхню третину видимої частини аркуша.
+// Ставить фразу (чи будь-що з полем el) на рівень очей — у верхню третину видимої
+// частини аркуша.
 export function bring(phrase, instant = false) {
   // На вузькому екрані верх вікна зайнятий відео — рівень очей рахуємо під ним.
   const stick = narrow.matches ? stage.offsetHeight : 0;
