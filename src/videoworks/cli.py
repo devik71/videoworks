@@ -27,6 +27,7 @@ from videoworks import (
     paths,
     preview,
     render,
+    strike_server,
     studio,
     subtitles,
     translate,
@@ -35,6 +36,7 @@ from videoworks import edl as edl_mod
 from videoworks import fcpxml as fcpxml_mod
 from videoworks import filmstrip as filmstrip_mod
 from videoworks import scenes as scenes_mod
+from videoworks import strikes as strikes_mod
 from videoworks.asr import registry, repair
 from videoworks.models import Edl, Scenes, Transcript
 from videoworks.text import plural
@@ -999,6 +1001,107 @@ def studio_cmd(
         what=f"{video.name} + {path.name} · правки пишуться в {path.name}",
         open_browser=open_browser,
     )
+
+
+@app.command(name="strike")
+def strike_cmd(
+    project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
+    port: Annotated[int, typer.Option(help="Порт; 0 — вибрати вільний")] = 8772,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Відкрити браузер")] = True,
+) -> None:
+    """Піднімає викреслювач: людина проводить пензлем по словах, що не мають прозвучати."""
+    project = paths.resolve(project_name)
+    if not project.transcript_raw.exists():
+        _strike_no_transcript()
+    transcript = Transcript.load(project.transcript_raw)
+    if not transcript.has_word_timings:
+        _strike_no_transcript()
+    try:
+        video = project.source_video()
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+
+    path = project.strikes
+    transcript_sha = strikes_mod.sha256(project.transcript_raw)
+    try:
+        source = video.relative_to(project.root).as_posix()
+    except ValueError:
+        source = str(video)  # відео поза проєктом: відносного шляху немає
+
+    try:
+        saved, unglued = strikes_mod.load(
+            path, transcript=transcript, transcript_sha=transcript_sha, source=source
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+    if unglued:
+        console.print(
+            f"[yellow]{plural(unglued, 'слово', 'слова', 'слів')} не знайшлись у новому "
+            "транскрипті й стали ручними відрізками[/]"
+        )
+    # Перенесений стан пишемо одразу: файл завжди відповідає чинному транскрипту.
+    # Нового файлу, де нічого не викреслено, не заводимо.
+    if path.exists():
+        on_disk = json.loads(path.read_text(encoding="utf-8-sig")).get("transcript_sha256")
+        if on_disk != transcript_sha:
+            strikes_mod.store(path, saved, duration=transcript.duration)
+    pending = {"unglued": unglued}
+
+    def load() -> dict:
+        # Файл могла змінити інша програма, тож читаємо його щоразу; зсув
+        # транскрипту вже враховано при старті, тому тут він не повторюється.
+        current, _ = strikes_mod.load(
+            path, transcript=transcript, transcript_sha=transcript_sha, source=source
+        )
+        reported, pending["unglued"] = pending["unglued"], 0
+        return strikes_mod.state(
+            transcript, current, title=project.root.name, unglued=reported
+        )
+
+    def store(words: list[int], manual: list[tuple[float, float]]) -> dict:
+        chosen = strikes_mod.from_indices(
+            words, manual, transcript=transcript, transcript_sha=transcript_sha, source=source
+        )
+        strikes_mod.store(path, chosen, duration=transcript.duration)
+        done = strikes_mod.state(transcript, chosen, title=project.root.name)
+        return {key: done[key] for key in ("struck", "manual", "spans", "counts")}
+
+    try:
+        server = strike_server.build_server(
+            video=video, load=load, store=store, stamp=lambda: strikes_mod.sha256(path), port=port
+        )
+    except OSError as exc:
+        raise typer.BadParameter(
+            f"Порт {port} зайнятий ({exc}). Візьми інший або --port 0."
+        ) from exc
+
+    _serve(
+        server,
+        label="Викреслювач",
+        what=f"{video.name} + {transcript.language} · позначки пишуться в {path.name}",
+        open_browser=open_browser,
+    )
+
+    if not path.exists():
+        console.print("Нічого не викреслено")
+        return
+    final, _ = strikes_mod.load(
+        path, transcript=transcript, transcript_sha=transcript_sha, source=source
+    )
+    counts = strikes_mod.state(transcript, final, title=project.root.name)["counts"]
+    console.print(
+        f"Викреслено: {plural(counts['words'], 'слово', 'слова', 'слів')}, "
+        f"{counts['manual']} без слів, {counts['seconds']} с → {path.name}"
+    )
+
+
+def _strike_no_transcript() -> None:
+    console.print(
+        "[red]Немає транскрипту зі словами. Спершу: videoworks transcribe <project> --lang uk[/]"
+    )
+    raise typer.Exit(code=1)
 
 
 @app.command()
