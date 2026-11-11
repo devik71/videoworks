@@ -1068,8 +1068,9 @@ def strike_cmd(
         raise typer.Exit(code=1) from exc
     if unglued:
         console.print(
-            f"[yellow]{plural(unglued, 'слово', 'слова', 'слів')} не знайшлись у новому "
-            "транскрипті й стали ручними відрізками[/]"
+            "[yellow]"
+            + plural(unglued, "слово не знайшлось", "слова не знайшлись", "слів не знайшлись")
+            + " у новому транскрипті й стали ручними відрізками[/]"
         )
     # Перенесений стан пишемо одразу: файл завжди відповідає чинному транскрипту.
     # Нового файлу, де нічого не викреслено, не заводимо.
@@ -1117,9 +1118,15 @@ def strike_cmd(
     if not path.exists():
         console.print("Нічого не викреслено")
         return
-    final, _ = strikes_mod.load(
-        path, transcript=transcript, transcript_sha=transcript_sha, source=source
-    )
+    try:
+        final, _ = strikes_mod.load(
+            path, transcript=transcript, transcript_sha=transcript_sha, source=source
+        )
+    except ValueError as exc:
+        # Файл зіпсували, поки сервер працював: підсумку не буде, а причина —
+        # не трасування, а рядок, з яким людина знає, що робити.
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
     counts = strikes_mod.state(transcript, final, title=project.root.name)["counts"]
     console.print(
         f"Викреслено: {plural(counts['words'], 'слово', 'слова', 'слів')}, "

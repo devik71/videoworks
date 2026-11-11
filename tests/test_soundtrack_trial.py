@@ -18,6 +18,7 @@ from videoworks.soundtrack.trial import (
     gains,
     load,
     local_spans,
+    no_voice_message,
     quiet_windows,
     refine,
     run_trial,
@@ -252,3 +253,10 @@ def test_quiet_windows_skip_struck_stretches_and_match_the_old_rule_without_stri
     got = quiet_windows(duck, covered, strike, rate)
     assert slice(3000, 4000) in old and slice(3000, 4000) not in got
     assert got == [w for w in old if w != slice(3000, 4000)]
+
+
+def test_no_voice_says_when_strikes_removed_all_of_it():
+    assert "викреслен" not in no_voice_message([])
+    told = no_voice_message([(1.0, 2.0), (5.0, 6.5)])
+    assert told.startswith("Голос не знайдено")
+    assert "викреслен" in told and "2" in told

@@ -118,7 +118,7 @@ def test_strike_announces_unglued_words_and_saves_the_rematch(project, stub):
     old_strikes(project, [("зникло", 5.0, 5.4), ("два", 1.4, 1.7)])
     result = run(project, "--no-open")
     assert result.exit_code == 0
-    assert "1 слово не знайшлись у новому транскрипті" in " ".join(result.output.split())
+    assert "1 слово не знайшлось у новому транскрипті" in " ".join(result.output.split())
     saved = Strikes.model_validate_json((project / "strikes.json").read_text(encoding="utf-8"))
     assert saved.transcript_sha256 == strikes.sha256(project / "transcript.raw.json")
     assert [w.w for w in saved.words] == ["два"]
@@ -148,6 +148,28 @@ def test_strike_prints_the_summary_on_exit(project, stub):
     assert "0 без слів" in result.output
     assert "strikes.json" in result.output
     assert stub.closed
+
+
+def test_strike_agrees_the_verb_with_many_unglued_words(project, stub):
+    old_strikes(project, [("зникло", 5.0, 5.4), ("пропало", 6.0, 6.4)])
+    result = run(project, "--no-open")
+    assert "2 слова не знайшлись у новому транскрипті" in " ".join(result.output.split())
+
+
+def test_strike_reports_a_file_broken_while_serving_without_a_traceback(project, monkeypatch):
+    path = project / "strikes.json"
+
+    class Breaking(Stub):
+        def serve_forever(self):
+            path.write_bytes(b"{broken")  # інша програма зіпсувала файл під сервером
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(strike_server, "build_server", Breaking().build)
+    result = run(project, "--no-open")
+    assert result.exit_code == 1
+    assert "strikes.json зіпсований" in " ".join(result.output.split())
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert path.read_bytes() == b"{broken"
 
 
 def test_strike_says_nothing_was_struck_when_there_is_no_file(project, stub):

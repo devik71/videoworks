@@ -264,6 +264,21 @@ def voice_spans(
     return spans, dropped
 
 
+def no_voice_message(struck: Sequence[tuple[float, float]]) -> str:
+    """Чому пілот зупинився без голосу.
+
+    Якщо в уривку є викреслене, голос міг зникнути саме через нього — людина
+    має бачити, що причина в її позначках, а не в записі чи ASR.
+    """
+    message = "Голос не знайдено: тест дакінгу не можна вважати проведеним"
+    if struck:
+        message += (
+            f". В уривку викреслено відрізків: {len(struck)} — можливо, вони "
+            "прибрали весь голос; візьми інший --start"
+        )
+    return message
+
+
 def duck_curve(length: int, rate: int, spans: list[tuple[float, float]]) -> np.ndarray:
     """Атака закінчується за 200 мс до слова; перетини не відкривають музику."""
     curve = np.zeros(length, dtype=np.float32)
@@ -426,7 +441,7 @@ def run_trial(
     struck = local_spans(struck_raw or [], start, seconds)
     spans, dropped = voice_spans(room_text, lyric_text, struck)
     if not spans:
-        raise ValueError("Голос не знайдено: тест дакінгу не можна вважати проведеним")
+        raise ValueError(no_voice_message(struck))
     room = load(project.source_video(), 48000, start=start, duration=seconds, channels=2)
     clean, covered = aligned_audio(Path(match.track), match, seconds, 48000)
     n = min(len(room), len(clean))
