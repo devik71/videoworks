@@ -35,6 +35,7 @@ from videoworks import (
 from videoworks import edl as edl_mod
 from videoworks import fcpxml as fcpxml_mod
 from videoworks import filmstrip as filmstrip_mod
+from videoworks import proxy as proxy_mod
 from videoworks import scenes as scenes_mod
 from videoworks import strikes as strikes_mod
 from videoworks.asr import registry, repair
@@ -354,6 +355,7 @@ def cut(
         raise typer.BadParameter(f"Немає {project.edl.name}. Спочатку trim або план від агента.")
 
     plan = Edl.load(project.edl)
+    _warn_unmuted_strikes(project)
     probe_data = _probe_of(project, video)
     duration = ingest.duration_of(probe_data)
     with_audio = ingest.has_audio(probe_data)
@@ -405,6 +407,25 @@ def cut(
         console.print(
             f"[green]Транскрипт перемаплено[/] {project.transcript_cut.name} · "
             f"{len(remapped.words())} слів лишилось"
+        )
+
+
+def _warn_unmuted_strikes(project: paths.Project) -> None:
+    """Попереджає, що викреслене людиною в цьому рендері прозвучить.
+
+    Відрізки зі strikes.json поки застосовує лише пілот soundtrack-test. Без цього
+    рядка агент змонтував би відео, певний, що викреслені слова вже прибрано.
+    """
+    if not project.strikes.exists():
+        return
+    try:
+        marked = json.loads(project.strikes.read_text(encoding="utf-8-sig")).get("spans")
+    except (ValueError, OSError, AttributeError):
+        marked = True  # файл не читається — краще зайве попередження, ніж мовчання
+    if marked:
+        console.print(
+            "[yellow]У проєкті є викреслені місця, але cut їх не глушить — "
+            "викреслені слова в цьому відео прозвучать. Скажи про це людині.[/]"
         )
 
 
@@ -1008,6 +1029,12 @@ def strike_cmd(
     project_name: Annotated[str, typer.Argument(metavar="PROJECT")],
     port: Annotated[int, typer.Option(help="Порт; 0 — вибрати вільний")] = 8772,
     open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Відкрити браузер")] = True,
+    use_proxy: Annotated[
+        bool,
+        typer.Option(
+            "--proxy", help="Віддати сторінці легку копію відео (H.264 960p) замість оригіналу"
+        ),
+    ] = False,
 ) -> None:
     """Піднімає викреслювач: людина проводить пензлем по словах, що не мають прозвучати."""
     project = paths.resolve(project_name)
@@ -1028,6 +1055,9 @@ def strike_cmd(
         source = video.relative_to(project.root).as_posix()
     except ValueError:
         source = str(video)  # відео поза проєктом: відносного шляху немає
+
+    # `source` лишається оригіналом: копія лише для очей, час у ній той самий.
+    shown = _strike_proxy(project, video) if use_proxy else video
 
     try:
         saved, unglued = strikes_mod.load(
@@ -1070,7 +1100,7 @@ def strike_cmd(
 
     try:
         server = strike_server.build_server(
-            video=video, load=load, store=store, stamp=lambda: strikes_mod.sha256(path), port=port
+            video=shown, load=load, store=store, stamp=lambda: strikes_mod.sha256(path), port=port
         )
     except OSError as exc:
         raise typer.BadParameter(
@@ -1080,7 +1110,7 @@ def strike_cmd(
     _serve(
         server,
         label="Викреслювач",
-        what=f"{video.name} + {transcript.language} · позначки пишуться в {path.name}",
+        what=f"{shown.name} + {transcript.language} · позначки пишуться в {path.name}",
         open_browser=open_browser,
     )
 
@@ -1095,6 +1125,22 @@ def strike_cmd(
         f"Викреслено: {plural(counts['words'], 'слово', 'слова', 'слів')}, "
         f"{counts['manual']} без слів, {counts['seconds']} с → {path.name}"
     )
+
+
+def _strike_proxy(project: paths.Project, video: Path) -> Path:
+    """Легка копія для сторінки: збираємо, лише якщо її немає або оригінал новіший."""
+    target = project.strike_proxy
+    if not proxy_mod.stale(video, target):
+        console.print(f"[dim]Беру готову копію {target.name}[/]")
+        return target
+    try:
+        with console.status(f"Збираю легку копію {target.name}…"):
+            proxy_mod.build(video, target)
+    except (RuntimeError, OSError) as exc:  # FfmpegMissing — теж RuntimeError
+        console.print(f"[red]Копію не зібрано: {exc}[/]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Зібрано[/] {target}")
+    return target
 
 
 def _strike_no_transcript() -> None:

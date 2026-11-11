@@ -54,6 +54,10 @@ class Project:
         return self.root / "strikes.json"
 
     @property
+    def strike_proxy(self) -> Path:
+        return self.out / "strike-proxy.mp4"
+
+    @property
     def cut_video(self) -> Path:
         return self.out / "cut.mp4"
 

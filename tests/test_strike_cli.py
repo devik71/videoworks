@@ -6,7 +6,7 @@ import webbrowser
 import pytest
 from typer.testing import CliRunner
 
-from videoworks import strike_server, strikes
+from videoworks import edl, strike_server, strikes
 from videoworks.cli import app
 from videoworks.models import BackendInfo, Segment, Strikes, Transcript, Word
 
@@ -204,6 +204,35 @@ def test_strike_reports_a_busy_port(project, monkeypatch):
     result = run(project, "--no-open")
     assert result.exit_code != 0
     assert "зайнятий" in result.output
+
+
+def cut_ready(project, spans) -> None:
+    """Проєкт, який cut --dry-run пройде без ffprobe: кеш probe і план на диску."""
+    probe = {
+        "format": {"duration": "60.0"},
+        "streams": [{"codec_type": "video", "r_frame_rate": "25/1"}],
+    }
+    (project / "probe.json").write_text(json.dumps(probe), encoding="utf-8")
+    edl.from_spans("media/raw.mp4", [(0.0, 10.0)]).save(project / "edl.json")
+    if spans is not None:
+        Strikes(source="media/raw.mp4", transcript_sha256="x", spans=spans).save(
+            project / "strikes.json"
+        )
+
+
+def test_cut_warns_that_it_does_not_mute_struck_spans(project):
+    cut_ready(project, [(1.0, 2.0)])
+    result = runner.invoke(app, ["cut", str(project), "--dry-run"])
+    assert result.exit_code == 0
+    assert "cut їх не глушить" in " ".join(result.output.split())
+
+
+@pytest.mark.parametrize("spans", [None, []])
+def test_cut_is_quiet_without_struck_spans(project, spans):
+    cut_ready(project, spans)
+    result = runner.invoke(app, ["cut", str(project), "--dry-run"])
+    assert result.exit_code == 0
+    assert "не глушить" not in result.output
 
 
 def test_strike_complains_about_a_missing_video(project, stub):
