@@ -321,6 +321,23 @@ def gains(
     return room_gain, music_gain
 
 
+def quiet_windows(
+    duck: np.ndarray, covered: np.ndarray, strike: np.ndarray, rate: int
+) -> list[slice]:
+    """Секундні вікна без голосу й без викресленого: за ними підбирається гучність.
+
+    У викресленому вікні кімната ще містить голос, який вилучено зі spans, тож
+    воно роздуло б original_rms і підігнало б чисту музику занадто гучною.
+    """
+    return [
+        slice(i, i + rate)
+        for i in range(0, len(duck) - rate, rate)
+        if np.max(duck[i : i + rate]) < 0.01
+        and np.max(strike[i : i + rate]) == 0
+        and np.all(covered[i : i + rate])
+    ]
+
+
 def uncovered_strikes(
     covered: np.ndarray, rate: int, spans: Sequence[tuple[float, float]]
 ) -> list[list[float]]:
@@ -415,19 +432,18 @@ def run_trial(
     n = min(len(room), len(clean))
     room, clean, covered = room[:n], clean[:n], covered[:n]
     curve = duck_curve(n, 48000, spans)
+    strike = strike_curve(n, 48000, struck)
     ratios = []
-    for i in range(0, n - 48000, 48000):
-        window = slice(i, i + 48000)
-        if np.max(curve[window]) < 0.01 and np.all(covered[window]):
-            original_rms = float(np.sqrt(np.mean(room[window] ** 2)))
-            clean_rms = float(np.sqrt(np.mean(clean[window] ** 2)))
-            if clean_rms > 0.001:
-                ratios.append(original_rms / clean_rms)
+    for window in quiet_windows(curve, covered, strike, 48000):
+        original_rms = float(np.sqrt(np.mean(room[window] ** 2)))
+        clean_rms = float(np.sqrt(np.mean(clean[window] ** 2)))
+        if clean_rms > 0.001:
+            ratios.append(original_rms / clean_rms)
     if len(ratios) < 3:
         raise ValueError("Замало ділянок без голосу для незалежного підбору гучності")
     gain = float(np.median(ratios))
     clean *= gain
-    room_gain, music_gain = gains(curve, covered, strike_curve(n, 48000, struck))
+    room_gain, music_gain = gains(curve, covered, strike)
     mixed = room * room_gain[:, None] + clean * music_gain[:, None]
     common_gain = min(
         1, 0.89 / max(float(np.max(np.abs(mixed))), float(np.max(np.abs(room))), 1e-12)

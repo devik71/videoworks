@@ -18,6 +18,7 @@ from videoworks.soundtrack.trial import (
     gains,
     load,
     local_spans,
+    quiet_windows,
     refine,
     run_trial,
     strike_curve,
@@ -233,3 +234,21 @@ def test_uncovered_strikes_are_merged_window_local_intervals():
     got = uncovered_strikes(covered, 1000, [(1.0, 4.0), (8.0, 10.0)])
     assert got == [[2.0, 3.5], [9.0, 10.0]]
     assert uncovered_strikes(np.ones(100, bool), 100, [(0.0, 1.0)]) == []
+
+
+def test_quiet_windows_skip_struck_stretches_and_match_the_old_rule_without_strikes():
+    rate = 1000
+    duck = duck_curve(8000, rate, [(1.0, 1.5)])
+    covered = np.ones(8000, bool)
+    covered[5000:6000] = False
+    zero = np.zeros(8000, np.float32)
+    old = [
+        slice(i, i + rate)
+        for i in range(0, 8000 - rate, rate)
+        if np.max(duck[i : i + rate]) < 0.01 and np.all(covered[i : i + rate])
+    ]
+    assert quiet_windows(duck, covered, zero, rate) == old
+    strike = strike_curve(8000, rate, [(3.2, 3.6)])
+    got = quiet_windows(duck, covered, strike, rate)
+    assert slice(3000, 4000) in old and slice(3000, 4000) not in got
+    assert got == [w for w in old if w != slice(3000, 4000)]
