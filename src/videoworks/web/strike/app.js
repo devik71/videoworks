@@ -18,7 +18,8 @@ import { bindKeys } from "./keys.js";
 import { note, unnote, tell, say, live } from "./notes.js";
 import { storage, keep, recallObject } from "./memory.js";
 import {
-  sheet, build, show, showManual, manualRow, wholePhrase, bring, quietState, make, clock,
+  sheet, build, show, showManual, manualRow, wholePhrase, bring, freeze, quietState, make,
+  clock,
 } from "./sheet.js";
 
 const EDGE = 0.15; // с: межі слів від ASR неточні, тож фразу граємо із запасом
@@ -290,12 +291,18 @@ function travel(snap) {
   commit(snap, { record: false });
 }
 
-const undo = () => travel(history.undo());
-const redo = () => travel(history.redo());
+// Поки пензель на папері, історія стоїть: крок назад посеред мазка зсунув би
+// рядки під рукою й переписав би те, від чого жест почався.
+const undo = () => {
+  if (!brush.live) travel(history.undo());
+};
+const redo = () => {
+  if (!brush.live) travel(history.redo());
+};
 
 function strikeActive() {
   const phrase = sheet.phrases[state.active];
-  if (!phrase) return;
+  if (!phrase || brush.live) return;
   const all = [];
   for (let i = phrase.first; i < phrase.first + phrase.count; i++) {
     if (sheet.wordEls[i]) all.push(i);
@@ -492,9 +499,20 @@ async function load({ drop = false } = {}) {
 
 // ---- жести, клавіші, кнопки ----
 
-attach(els.sheet, {
+const brush = attach(els.sheet, {
   blank: { has: (i) => sheet.blank.has(i) }, // аркуш можуть перечитати, а пензель один
   struck: () => state.struck,
+  rectOf: (i) => (sheet.wordEls[i] ? sheet.wordEls[i].getBoundingClientRect() : null),
+  // Жест живий — під рукою ніщо не рухається: позначку без слів, яку ще тримали,
+  // закриваємо до першого мазка, прокрутку аркуша відкладаємо до кінця жесту.
+  onDown: () => marker.release(),
+  onLive(on) {
+    if (!freeze(on) || on) return;
+    const row = state.blot >= 0 ? manualRow(state.blot) : null;
+    if (row) bring({ el: row });
+    else if (sheet.phrases.length) bring(sheet.phrases[state.active]);
+  },
+  onBlotClick: (m) => playManual(m),
   wordAt(x, y) {
     const el = document.elementFromPoint(x, y);
     return el && el.dataset && el.dataset.i !== undefined ? Number(el.dataset.i) : null;
@@ -541,6 +559,7 @@ attach(els.sheet, {
 
 bindKeys({
   ready: () => state.data !== null,
+  painting: () => brush.live,
   helpShown: () => help.shown,
   help: (open) => (open ? help.open() : help.close()),
   undo, redo, toggle, strikePhrase: strikeActive,

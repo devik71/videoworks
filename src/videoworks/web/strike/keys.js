@@ -5,6 +5,7 @@ import { NUDGE } from "./logic.js";
 
 // act:
 //   ready() -> boolean      аркуш завантажено
+//   painting() -> boolean   пензель зараз на папері
 //   helpShown() -> boolean, help(open: boolean)
 //   undo(), redo(), toggle(), go(dir), strikePhrase(), holdStart(), holdEnd(),
 //   mark(dir), sound(), nudge(edge, delta), escape()
@@ -13,6 +14,12 @@ export function bindKeys(act) {
     const el = event.target;
     if (!act.ready() || !(el instanceof HTMLElement)) return;
     if (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    // Одна рука малює — друга нічого не зсуває під нею: ні історії, ні фраз, ні
+    // позначок. Пробіл і стрілки ще й не мають прокрутити сторінку самі.
+    if (act.painting()) {
+      if (/^(Space|Arrow|Page|Home|End)/.test(event.code)) event.preventDefault();
+      return;
+    }
     // «?» на українській розкладці стоїть на іншій клавіші, тож ловимо і знак, і місце.
     const asks = !event.ctrlKey && !event.metaKey && !event.altKey
       && (event.key === "?" || (event.code === "Slash" && event.shiftKey));

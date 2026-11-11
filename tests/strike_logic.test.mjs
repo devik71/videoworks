@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   gestureMode, fill, applyGesture, isStroke, runs, seed, strokePath, isMuted, nextEdge,
   phraseAt, manualFromHold, nudge, removeManualAt, reviewStops, History, Outbox,
-  squeakPitch, plural,
+  squeakPitch, plural, crosses, FILL_LIMIT,
 } from "../src/videoworks/web/strike/logic.js";
 
 const S1 = { struck: [1, 2], manual: [] };
@@ -331,4 +331,59 @@ test("History.amend: крок, що повернувся до попереднь
   // Без попереднього кроку переписувати нічого — це звичайний новий крок.
   h.amend(S2);
   assert.deepEqual(h.undo(), S1);
+});
+
+// Рядок із п'яти слів по 40 px завширшки з проміжком 10 px; другий рядок на 50 px нижче.
+function wordRect(i) {
+  const line = Math.floor(i / 5);
+  const col = i % 5;
+  return { left: col * 50, right: col * 50 + 40, top: line * 50, bottom: line * 50 + 30 };
+}
+const along = (ax, ay, bx, by) => (i) => crosses(ax, ay, bx, by, wordRect(i));
+
+test("crosses: відрізок шляху пензля зачіпає прямокутник слова або минає його", () => {
+  const rect = { left: 10, right: 50, top: 10, bottom: 40 };
+  assert.equal(crosses(0, 25, 100, 25, rect), true); // наскрізь
+  assert.equal(crosses(20, 20, 30, 30, rect), true); // увесь усередині
+  assert.equal(crosses(0, 0, 100, 5, rect), false); // вище, далі за запас
+  assert.equal(crosses(0, 8, 100, 8, rect), true); // у межах запасу 4 px
+  assert.equal(crosses(0, 60, 5, 0, rect), false); // повз кут ліворуч
+  assert.equal(crosses(60, 25, 100, 25, rect), false); // не дійшов
+  assert.equal(crosses(30, 25, 30, 25, rect), true); // точка всередині
+  assert.equal(crosses(0, 0, 60, 50, rect), true); // навскоси через середину
+  assert.equal(crosses(NaN, 0, 60, 50, rect), false);
+  assert.equal(crosses(0, 25, 100, 25, null), false);
+});
+
+test("fill із шляхом: швидкий рух уздовж рядка бере кожне слово на шляху", () => {
+  // Одна подія миші перенесла вказівник зі слова 0 на слово 4 того самого рядка.
+  assert.deepEqual(fill(0, 4, new Set(), along(20, 15, 220, 15)), [1, 2, 3, 4]);
+  assert.deepEqual(fill(4, 0, new Set(), along(220, 15, 20, 15)), [3, 2, 1, 0]);
+  assert.deepEqual(fill(0, 4, new Set([2]), along(20, 15, 220, 15)), [1, 3, 4]);
+});
+
+test("fill із шляхом: навскісний рух бере лише те, над чим пройшла рука", () => {
+  // Зі слова 1 першого рядка на слово 13 третього: між ними за номерами 11 слів,
+  // але відрізок шляху проходить тільки над словом 7 другого рядка.
+  const took = fill(1, 13, new Set(), along(70, 15, 170, 115));
+  assert.deepEqual(took, [7, 13]);
+});
+
+test("fill із шляхом: аркуш зсунувся під вказівником — між словами нічого не добирається", () => {
+  // Вказівник майже не рухався, а під ним опинилось слово за сорок номерів далі.
+  assert.deepEqual(fill(3, 43, new Set(), () => false), [43]);
+  // Слово під вказівником береться завжди, навіть якщо геометрія каже «ні».
+  assert.deepEqual(fill(null, 4, new Set(), () => false), [4]);
+  assert.deepEqual(fill(3, 43, new Set([43]), () => true).includes(43), false);
+});
+
+test("fill із шляхом: стрибок, довший за правдоподібний, не добирається зовсім", () => {
+  let asked = 0;
+  const all = () => {
+    asked += 1;
+    return true;
+  };
+  assert.deepEqual(fill(0, FILL_LIMIT + 1, new Set(), all), [FILL_LIMIT + 1]);
+  assert.equal(asked, 0); // навіть не питали геометрію: сотні замірів на подію ні до чого
+  assert.equal(fill(0, FILL_LIMIT, new Set(), all).length, FILL_LIMIT);
 });

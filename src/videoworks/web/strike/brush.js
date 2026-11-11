@@ -1,7 +1,7 @@
 // Пензель: жест вказівника над словами й фарба поверх них. Тут немає ні стану
 // сторінки, ні мережі, ні плеєра — лише «якого слова торкнулись» і «що намалювати».
 
-import { fill, gestureMode, isStroke, seed, strokePath } from "./logic.js";
+import { crosses, fill, gestureMode, isStroke, seed, strokePath } from "./logic.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const OVERHANG = 5; // px: мазок трохи виходить за краї слова, як справжній
@@ -21,6 +21,8 @@ const painted = new WeakMap();
 
 // handlers:
 //   wordAt(x, y) -> number | null   слово під точкою вікна
+//   rectOf(i) -> DOMRect | null     де слово зараз у вікні: за цим видно, чи пройшов
+//                                   над ним шлях вказівника
 //   blotAt(x, y) -> number | null   відрізок без слів під точкою (необовʼязково)
 //   struck() -> Set                 викреслене до жесту: за ним визначається режим
 //   blank: Set                      порожні слова, яких пензель не бере
@@ -28,10 +30,15 @@ const painted = new WeakMap();
 //   onGesture(touched, mode, blots) жест завершено: записати
 //   onCancel()                      жест зірвався: повернути, як було
 //   onClick(index)                  натиск на слові без руху
+//   onBlotClick(m)                  натиск без руху на рядку без слів
+//   onDown()                        натиск на аркуші, ще до пошуку слова під ним
+//   onLive(on)                      жест почався / скінчився (будь-чим): поки він
+//                                   живий, під рукою ніщо не має рухатись
 //   onStep(index, speed, step, mode)  пензель зайшов на нове слово: швидкість у
 //                                   px/мс і котре це слово в жесті, від нуля
 // blots — номери відрізків без слів, які жест стирає. Такий рядок — теж викреслене:
 // жест, що почався на ньому, стирає, а мазок-викреслення, що йде повз, його не чіпає.
+// Повертає { live } — чи триває жест просто зараз.
 export function attach(root, handlers) {
   const blank = handlers.blank || new Set();
   const blotAt = handlers.blotAt || (() => null);
@@ -40,9 +47,13 @@ export function attach(root, handlers) {
 
   root.addEventListener("pointerdown", (event) => {
     if (gesture || (event.pointerType === "mouse" && event.button !== 0)) return;
+    // До того, як дивитись, що під вказівником: слухач може закінчити свої справи,
+    // які зсувають рядки (закрити позначку без слів, яку ще тримали).
+    if (handlers.onDown) handlers.onDown();
     const index = handlers.wordAt(event.clientX, event.clientY);
     const blot = index === null ? blotAt(event.clientX, event.clientY) : null;
     if (index === null && blot === null) return;
+    if (handlers.onLive) handlers.onLive(true);
     gesture = {
       pointer: event.pointerId,
       x: event.clientX,
@@ -58,15 +69,24 @@ export function attach(root, handlers) {
       px: event.clientX,
       py: event.clientY,
     };
-    // Вказівник може вийти за аркуш — жест від цього не повинен обірватись. На рядку
-    // без слів захоплюємо лише з початком мазка: інакше його кнопка не почула б кліку.
-    if (index !== null) root.setPointerCapture(event.pointerId);
+    // Вказівник може вийти за аркуш — жест від цього не повинен обірватись, і його
+    // кінець мусить дійти сюди, де б кнопку не відпустили. Тому захоплюємо завжди,
+    // а клік по рядку без слів розпізнаємо самі.
+    root.setPointerCapture(event.pointerId);
   });
 
   root.addEventListener("pointermove", (event) => {
     const g = gesture;
     if (!g || event.pointerId !== g.pointer) return;
+    // Миша рухається без натиснутої кнопки — відпускання ми не побачили (воно
+    // сталось поза вікном). Жест, що жив би далі, стирав би слова самим наведенням.
+    if (event.pointerType === "mouse" && event.buttons === 0) {
+      end(false, event.timeStamp);
+      return;
+    }
     const index = handlers.wordAt(event.clientX, event.clientY);
+    const fromX = g.px;
+    const fromY = g.py;
     const elapsed = Math.max(event.timeStamp - g.at, 1);
     const speed = Math.hypot(event.clientX - g.px, event.clientY - g.py) / elapsed;
     g.at = event.timeStamp;
@@ -93,34 +113,64 @@ export function attach(root, handlers) {
       g.mode = g.first === null ? "erase" : gestureMode(handlers.struck(), g.first);
       g.touched = [];
       root.classList.add("brushing");
-      if (g.first === null) {
-        root.setPointerCapture(g.pointer);
-        wipe(g.blot);
-      } else take(g.first);
+      if (g.first === null) wipe(g.blot);
+      else take(g.first);
     }
     if (index !== null && index !== g.last) {
-      for (const i of fill(g.last, index, blank)) take(i);
+      // Між попереднім словом і цим добираємо лише ті, над якими пройшов шлях
+      // вказівника від минулої події до цієї (правило — у logic.js біля fill).
+      const crossed = (i) => crosses(
+        fromX, fromY, event.clientX, event.clientY, handlers.rectOf ? handlers.rectOf(i) : null,
+      );
+      for (const i of fill(g.last, index, blank, crossed)) take(i);
       g.last = index;
-    }
+    } else if (index !== null) take(index); // рука рухається по слову — воно під пензлем
     if (g.mode === "erase" && index === null) wipe(blotAt(event.clientX, event.clientY));
     if (changed) handlers.onPreview(g.touched, g.mode, g.blots);
   });
 
-  const finish = (event, completed) => {
+  // Кінець жесту, хоч чим він скінчився. Скасований нічого не записує й повертає
+  // аркуш до того, що було.
+  function end(completed, stamp) {
     const g = gesture;
-    if (!g || event.pointerId !== g.pointer) return;
+    if (!g) return;
     gesture = null;
     root.classList.remove("brushing");
     if (root.hasPointerCapture(g.pointer)) root.releasePointerCapture(g.pointer);
+    // Спершу «жест скінчився»: клік і запис рухають аркуш, а це вже можна.
+    if (handlers.onLive) handlers.onLive(false);
     if (!g.touched) {
-      if (completed && g.first !== null) handlers.onClick(g.first);
+      if (!completed) return;
+      // Натиск поглинули ми, тож власний клік кнопки рядка не має спрацювати вдруге.
+      swallow = stamp;
+      if (g.first !== null) handlers.onClick(g.first);
+      else if (handlers.onBlotClick) handlers.onBlotClick(g.blot);
     } else if (completed) {
-      swallow = event.timeStamp;
+      swallow = stamp;
       handlers.onGesture(g.touched, g.mode, g.blots);
     } else {
       handlers.onCancel();
     }
+  }
+
+  const finish = (event, completed) => {
+    if (gesture && event.pointerId === gesture.pointer) end(completed, event.timeStamp);
   };
+
+  // Аркуш поїхав під вказівником (коліщатко, клавіша, чужа прокрутка) або вікно
+  // змінило розмір: слово під пензлем тепер інше, і «від попереднього до цього»
+  // вже не шлях руки. Беремо за попереднє те, що під вказівником зараз, нічого не
+  // добираючи; далі жест іде звідси.
+  const reanchor = () => {
+    if (gesture && gesture.touched) gesture.last = handlers.wordAt(gesture.px, gesture.py);
+  };
+  window.addEventListener("scroll", reanchor, true);
+  window.addEventListener("resize", reanchor);
+  // Вікно втратило увагу чи вкладку сховали — відпускання може сюди не дійти.
+  window.addEventListener("blur", () => end(false, 0));
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) end(false, 0);
+  });
 
   root.addEventListener("pointerup", (event) => finish(event, true));
   root.addEventListener("pointercancel", (event) => finish(event, false));
@@ -135,6 +185,12 @@ export function attach(root, handlers) {
     event.stopPropagation();
     event.preventDefault();
   }, true);
+
+  return {
+    get live() {
+      return gesture !== null;
+    },
+  };
 }
 
 // ---- фарба ----

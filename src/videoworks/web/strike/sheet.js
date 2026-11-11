@@ -245,11 +245,30 @@ new ResizeObserver(([entry]) => {
 // ---- рух до фрази ----
 
 let glideId = 0;
+let frozen = false; // триває жест пензля: аркуш під рукою не рухаємо
+let owed = false; // за цей час когось просили прокрутити — борг віддамо після жесту
+
+// Поки пензель на папері, аркуш стоїть: слово, що виїхало з-під вказівника, — це
+// викреслене не те. Рух, який почали до жесту, обривається; повертає, чи лишився
+// борг, — тоді той, хто знає активну фразу, покаже її один раз.
+export function freeze(on) {
+  frozen = on;
+  if (on) {
+    if (glideId) owed = true;
+    cancelAnimationFrame(glideId);
+    glideId = 0;
+    return false;
+  }
+  const due = owed;
+  owed = false;
+  return due;
+}
 
 // Власне прокручування замість scrollIntoView: браузерне «плавно» триває скільки
 // йому заманеться, а тут рух мусить устигати за клавішею, яку тиснуть раз у раз.
 function glide(top, instant) {
   cancelAnimationFrame(glideId);
+  glideId = 0;
   const from = window.scrollY;
   if (instant || calm.matches || Math.abs(top - from) < 2) {
     window.scrollTo(0, top);
@@ -259,7 +278,7 @@ function glide(top, instant) {
   const step = (now) => {
     const k = Math.min(1, (now - began) / GLIDE_MS);
     window.scrollTo(0, from + (top - from) * (1 - (1 - k) ** 3));
-    if (k < 1) glideId = requestAnimationFrame(step);
+    glideId = k < 1 ? requestAnimationFrame(step) : 0;
   };
   glideId = requestAnimationFrame(step);
 }
@@ -267,6 +286,10 @@ function glide(top, instant) {
 // Ставить фразу (чи будь-що з полем el) на рівень очей — у верхню третину видимої
 // частини аркуша.
 export function bring(phrase, instant = false) {
+  if (frozen) {
+    owed = true;
+    return;
+  }
   // На вузькому екрані верх вікна зайнятий відео — рівень очей рахуємо під ним.
   const stick = narrow.matches ? stage.offsetHeight : 0;
   const room = window.innerHeight - stick - bar.offsetHeight;

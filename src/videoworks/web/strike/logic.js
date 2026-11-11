@@ -7,6 +7,8 @@ export const REACTION = 0.3; // с: людина тисне клавішу вж�
 export const MIN_MANUAL = 0.2; // с: коротший відрізок не почути й не влучити в нього
 export const NUDGE = 0.1; // с: крок підсування межі відрізка
 export const CONTEXT = 1.5; // с: скільки навколо викресленого прослухати перед ефіром
+export const FILL_SLACK = 4; // px: рука веде не рівно по рядку, шлях трохи товщий за лінію
+export const FILL_LIMIT = 40; // слів: більше за одну подію миші не перестрибнути й на бігу
 
 const HISTORY_LIMIT = 200;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -19,16 +21,51 @@ export function gestureMode(struck, first) {
   return struck.has(first) ? "erase" : "strike";
 }
 
-// Швидка миша перестрибує слова, тож між двома подіями добираємо всі проміжні.
+// Чи проходить відрізок шляху пензля (a → b) крізь прямокутник слова, розширений
+// на slack. Відтинання Ліанга — Барського: відрізок ріжемо чотирма межами по черзі.
+export function crosses(ax, ay, bx, by, rect, slack = FILL_SLACK) {
+  if (!rect || ![ax, ay, bx, by].every(Number.isFinite)) return false;
+  const dx = bx - ax;
+  const dy = by - ay;
+  let t0 = 0;
+  let t1 = 1;
+  const edges = [
+    [-dx, ax - (rect.left - slack)], [dx, rect.right + slack - ax],
+    [-dy, ay - (rect.top - slack)], [dy, rect.bottom + slack - ay],
+  ];
+  for (const [p, q] of edges) {
+    if (p === 0) {
+      if (q < 0) return false; // іде вздовж межі й лежить поза нею
+    } else if (p < 0) t0 = Math.max(t0, q / p);
+    else t1 = Math.min(t1, q / p);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+// Швидка миша перестрибує слова, тож між двома подіями добираємо проміжні.
 // Порожні слова викреслювати нічого, їх пропускаємо.
-export function fill(last, next, blank) {
+//
+// crossed(i) каже, чи пройшов шлях вказівника між цими двома подіями над словом i.
+// Із ним діє правило «викреслюється лише те, над чим пройшла рука»:
+//   - слово під вказівником (next) береться завжди;
+//   - проміжне — лише якщо шлях його перетнув. Швидкий рух уздовж рядка перетинає
+//     кожне слово на ньому; рух навскоси через три рядки — по слову-два на рядок, а
+//     не всі слова між початком і кінцем за номерами;
+//   - якщо проміжних більше за FILL_LIMIT, це не рука, а аркуш поїхав під вказівником
+//     (прокрутка, зсув розкладки): не добираємо нічого й геометрію навіть не питаємо.
+// Цей інструмент вирішує, що вирізати з ефіру: недобране слово людина домалює,
+// а зайве викреслене може не помітити.
+export function fill(last, next, blank, crossed = null) {
   const out = [];
   const step = last === null || next >= last ? 1 : -1;
   const from = last === null ? next : last + step;
   for (let i = from; step > 0 ? i <= next : i >= next; i += step) {
     if (!blank.has(i)) out.push(i);
   }
-  return out;
+  if (!crossed) return out;
+  if (out.length > FILL_LIMIT) return blank.has(next) ? [] : [next];
+  return out.filter((i) => i === next || crossed(i));
 }
 
 // Нова множина: стара лежить в історії скасувань і мусить лишатися недоторканою.
