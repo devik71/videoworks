@@ -23,6 +23,24 @@ videoworks — CLI для монтажу відео за текстом: тра�
 - `transcribe` на відеокарті NVIDIA йде в рази швидше; на процесорі годинне
   заняття розпізнаватиметься довго — попередь людину.
 
+### macOS (Apple Silicon)
+
+Проєкт писали й перевіряли на Windows з NVIDIA; на Mac його ще ніхто не
+запускав, тож перший прогін — теж перевірка. Що відомо заздалегідь:
+
+- Шляхи в інструкції віндові. На Mac замість `.venv\Scripts\python -m
+  videoworks.cli` пиши `uv run videoworks` (або `.venv/bin/python -m
+  videoworks.cli`).
+- ffmpeg — з Homebrew: `brew install ffmpeg`. Потім `uv sync` і
+  `uv run videoworks doctor`.
+- Розпізнавання (faster-whisper) на Mac іде **лише на процесорі**: графічний
+  чип Apple воно не використовує. Модель `large-v3` на 40-хвилинному занятті
+  працюватиме помітно довше, ніж на відеокарті NVIDIA. Запускай і попереди
+  людину, що це надовго.
+- `--encoder nvenc` на Mac немає; типовий `libx264` працює.
+- Відео з iPhone (HEVC) Safari й Chrome на Mac грають самі, тож для
+  `strike` `--proxy` зазвичай не потрібен.
+
 ## Проєкти й матеріали
 
 - Один проєкт — одна папка `projects/<name>/`. Відео кладуть у

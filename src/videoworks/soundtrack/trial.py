@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import wave
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
@@ -517,7 +518,8 @@ def run_trial(
                 project.source_video(),
                 plan,
                 output / f"{name}.mp4",
-                encoder="nvenc",
+                # NVENC є лише з картою NVIDIA; на Mac його немає зовсім.
+                encoder="nvenc" if sys.platform in ("win32", "linux") else "libx264",
                 quality=23,
                 audio_override=output / f"{name}.wav",
                 audio_origin=start,

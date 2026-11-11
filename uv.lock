@@ -979,8 +979,6 @@ version = "12.9.2.10"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "sys_platform == 'win32'",
-    "sys_platform == 'emscripten'",
-    "sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 dependencies = [
     { name = "nvidia-cuda-nvrtc-cu12", version = "12.9.86", source = { registry = "https://pypi.org/simple" } },
@@ -1014,8 +1012,6 @@ version = "12.9.86"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "sys_platform == 'win32'",
-    "sys_platform == 'emscripten'",
-    "sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/52/de/823919be3b9d0ccbf1f784035423c5f18f4267fb0123558d58b813c6ec86/nvidia_cuda_nvrtc_cu12-12.9.86-py3-none-win_amd64.whl", hash = "sha256:72972ebdcf504d69462d3bcd67e7b81edd25d0fb85a2c46d3ea3517666636349", size = 76408187, upload-time = "2025-06-05T20:12:27.819Z" },
@@ -1050,8 +1046,6 @@ version = "9.25.1.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "sys_platform == 'win32'",
-    "sys_platform == 'emscripten'",
-    "sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 dependencies = [
     { name = "nvidia-cublas-cu12", version = "12.9.2.10", source = { registry = "https://pypi.org/simple" } },
@@ -2347,9 +2341,9 @@ dependencies = [
     { name = "faster-whisper" },
     { name = "numpy" },
     { name = "nvidia-cublas-cu12", version = "12.8.4.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cublas-cu12", version = "12.9.2.10", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+    { name = "nvidia-cublas-cu12", version = "12.9.2.10", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
     { name = "nvidia-cudnn-cu12", version = "9.10.2.21", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
-    { name = "nvidia-cudnn-cu12", version = "9.25.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+    { name = "nvidia-cudnn-cu12", version = "9.25.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32'" },
     { name = "pydantic" },
     { name = "pysubs2" },
     { name = "rich" },
@@ -2385,8 +2379,8 @@ requires-dist = [
     { name = "faster-whisper", specifier = ">=1.1" },
     { name = "moss-transcribe-diarize", extras = ["torch-runtime"], marker = "extra == 'moss'", git = "https://github.com/OpenMOSS/MOSS-Transcribe-Diarize?rev=main" },
     { name = "numpy", specifier = ">=2.1" },
-    { name = "nvidia-cublas-cu12", specifier = ">=12.4" },
-    { name = "nvidia-cudnn-cu12", specifier = ">=9.1" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = ">=12.4" },
+    { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = ">=9.1" },
     { name = "pydantic", specifier = ">=2.10" },
     { name = "pysubs2", specifier = ">=1.7" },
     { name = "rich", specifier = ">=13.9" },

@@ -13,8 +13,10 @@ dependencies = [
     "numpy>=2.1",
     # CTranslate2 на Windows не тягне CUDA-рантайм сам:
     # без цих двох faster-whisper падає з "Could not locate cudnn_ops64_9.dll"
-    "nvidia-cublas-cu12>=12.4",
-    "nvidia-cudnn-cu12>=9.1",
+    # На macOS цих коліс немає зовсім, і без маркера `uv sync` там не ставив
+    # проєкт узагалі; ASR на Mac однаково йде на процесорі.
+    "nvidia-cublas-cu12>=12.4; sys_platform == 'win32' or sys_platform == 'linux'",
+    "nvidia-cudnn-cu12>=9.1; sys_platform == 'win32' or sys_platform == 'linux'",
     "scipy>=1.14",
 ]
 
