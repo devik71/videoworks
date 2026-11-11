@@ -88,6 +88,10 @@ uv sync --extra whisperx
 uv sync --extra moss
 ```
 
+На Mac з Apple Silicon — `uv sync --extra mlx`: Whisper на графічному чипі
+замість процесора. `transcribe` тоді сам обирає бекенд `mlx`. Ще не перевірено
+на справжньому Mac — план першого прогону в [AGENTS.md](AGENTS.md).
+
 > [!IMPORTANT]
 > `pyproject.toml` навмисно тягне `torch` із `download.pytorch.org/whl/cu128`:
 > колесо з PyPI під Windows — без CUDA (`2.14.0+cpu`), і обидва бекенди мовчки

@@ -31,15 +31,48 @@ videoworks — CLI для монтажу відео за текстом: тра�
 - Шляхи в інструкції віндові. На Mac замість `.venv\Scripts\python -m
   videoworks.cli` пиши `uv run videoworks` (або `.venv/bin/python -m
   videoworks.cli`).
-- ffmpeg — з Homebrew: `brew install ffmpeg`. Потім `uv sync` і
+- ffmpeg — з Homebrew: `brew install ffmpeg`. Потім `uv sync --extra mlx` і
   `uv run videoworks doctor`.
-- Розпізнавання (faster-whisper) на Mac іде **лише на процесорі**: графічний
-  чип Apple воно не використовує. Модель `large-v3` на 40-хвилинному занятті
-  працюватиме помітно довше, ніж на відеокарті NVIDIA. Запускай і попереди
-  людину, що це надовго.
+- Розпізнавання на Mac іде бекендом `mlx` (mlx-whisper на графічному чипі
+  Apple), а не faster-whisper: той на Mac рахує лише процесором. `transcribe`
+  обирає `mlx` сам, якщо поставлено `--extra mlx`. Модель та сама — `large-v3`,
+  мовлення так само вирізається Silero VAD.
 - `--encoder nvenc` на Mac немає; типовий `libx264` працює.
+- Пілот звуку `soundtrack-test` розпізнає свої уривки ще faster-whisper, тобто
+  процесором; уривки короткі, тож це терпимо.
 - Відео з iPhone (HEVC) Safari й Chrome на Mac грають самі, тож для
   `strike` `--proxy` зазвичай не потрібен.
+
+### Перший прогін на Mac — зробити й записати
+
+Бекенд `mlx` написано на Windows і перевірено лише тестами з підміненою
+моделлю: MLX на Windows не ставиться. Поки ці кроки не пройдено, він вважається
+неперевіреним. Пройди їх на першому ж справжньому занятті, перш ніж монтувати:
+
+1. `uv sync --extra mlx`, потім `uv run videoworks doctor` — у списку
+   бекендів має бути `mlx`. Якщо `uv sync` падає — зупинись і перекажи помилку
+   людині дослівно.
+2. Розпізнати заняття: `uv run videoworks transcribe <project> --lang uk`.
+   У першому рядку виводу має стояти `mlx · large-v3 · apple-gpu`. Перший запуск
+   завантажує модель (~3 ГБ), це окремо від часу роботи.
+3. Порівняти з faster-whisper на тому самому записі (займе довше — він на
+   процесорі):
+   `uv run videoworks transcribe <project> --lang uk --backend faster-whisper --out projects/<project>/transcript.cpu.json`
+4. Записати в `projects/<project>/project.md`, розділом «Перший прогін mlx»:
+   - час обох прогонів і тривалість запису;
+   - кількість слів в обох транскриптах і скільки з них із `prob < 0.5`
+     (`uv run videoworks show <project> --words` або прямо з JSON);
+   - на 3–4 фразах: чи збігаються слова й таймкоди початку слів (розбіжність
+     до ~0.2 с нормальна, більша — підозріла);
+   - чи немає вигаданого тексту на ділянках, де лише музика.
+5. Відкрити `uv run videoworks strike <project>` і переконатися, що слова
+   підсвічуються вчасно під час відтворення — це найкраща перевірка таймкодів.
+6. Якщо все гаразд — далі працювати з `transcript.raw.json` від `mlx`. Якщо
+   слова чи таймкоди помітно гірші — повернутись до faster-whisper:
+   `transcribe … --backend faster-whisper`, і сказати людині, що саме не так.
+
+Якщо щось у коді треба виправити, правки — окремим комітом із поясненням,
+що побачив на Mac.
 
 ## Проєкти й матеріали
 

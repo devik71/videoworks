@@ -21,6 +21,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Whisper на графічному чипі Apple Silicon. Поза Mac MLX не існує, тож маркер
+# робить `--extra mlx` порожнім на Windows і Linux, а не помилкою.
+mlx = ["mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'"]
 # Важкі бекенди — лише тим, хто їх міряє.
 # torch і torchaudio названі явно, хоча приходять і транзитивно:
 # tool.uv.sources діє лише на прямі залежності, і без цього обидва

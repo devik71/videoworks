@@ -133,8 +133,13 @@ def transcribe(
     model: Annotated[str, typer.Option(help="Модель Whisper")] = "large-v3",
     device: Annotated[str | None, typer.Option(help="cuda або cpu")] = None,
     backend_name: Annotated[
-        str, typer.Option("--backend", help="faster-whisper або whisperx")
-    ] = "faster-whisper",
+        str | None,
+        typer.Option(
+            "--backend",
+            help="faster-whisper, whisperx або mlx; типово mlx на Mac з Apple Silicon, "
+            "інакше faster-whisper",
+        ),
+    ] = None,
     out: Annotated[str | None, typer.Option("--out", help="Куди писати; типово transcript.raw.json")] = None,
 ) -> None:
     """Транскрибує проєкт у transcript.raw.json."""
@@ -145,14 +150,16 @@ def transcribe(
         console.print("Аудіо ще немає — витягую.")
         ingest.extract_audio(video, project.audio)
 
+    backend_name = backend_name or registry.default()
     backend = registry.build(backend_name, model=model, device=device, language=lang)
     console.print(f"[cyan]{backend.name}[/] · {model} · {getattr(backend, 'device', '?')}")
 
     def show(segment) -> None:
         console.print(f"[dim]{segment.start:7.1f}[/] {segment.text}")
 
-    # Потоковий вивід уміє лише faster-whisper; решта віддає результат цілком.
-    extra = {"on_segment": show} if backend_name == "faster-whisper" else {}
+    # Потоковий вивід уміє faster-whisper; mlx друкує репліки вже наприкінці,
+    # решта віддає результат цілком і мовчки.
+    extra = {"on_segment": show} if backend_name in ("faster-whisper", "mlx") else {}
     transcript = backend.transcribe(
         project.audio, language=lang, source=str(video), **extra
     )
@@ -662,8 +669,10 @@ def benchmark(
             console.print(f"[yellow]{backend_name}: не встановлено, пропускаю[/]")
             continue
 
-        # Whisper-моделі приймають обидва бекенди; у MOSS модель одна своя.
-        variants = models.split(",") if backend_name in ("faster-whisper", "whisperx") else [None]
+        # Whisper-моделі приймають усі три бекенди; у MOSS модель одна своя.
+        variants = (
+            models.split(",") if backend_name in ("faster-whisper", "whisperx", "mlx") else [None]
+        )
         for model in variants:
             label = f"{backend_name}/{model.strip()}" if model else backend_name
             console.print(f"[cyan]{label}[/]…")
