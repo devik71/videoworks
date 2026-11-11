@@ -11,6 +11,7 @@ import json
 import re
 import subprocess
 import wave
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -19,10 +20,12 @@ import numpy as np
 from scipy import signal, stats
 
 from videoworks.ingest import _binary
-from videoworks.models import Transcript
+from videoworks.models import Strikes, Transcript
 
 SYNC_RATE = 8_000
 FEATURE_RATE = 100
+# Рампи викреслення лежать усередині відрізка: запас pad уже їх вміщує.
+STRIKE_RAMP = 0.04
 
 
 def load(
@@ -224,8 +227,14 @@ def sync_trial(project, *, start: float = 0, seconds: float = 120, progress=prin
     return match, report
 
 
-def voice_spans(room: Transcript, lyrics: Transcript) -> tuple[list[tuple[float, float]], int]:
-    """Збіг слів лірики за текстом і часом не повинен пригинати музику."""
+def voice_spans(
+    room: Transcript, lyrics: Transcript, struck: Sequence[tuple[float, float]] = ()
+) -> tuple[list[tuple[float, float]], int]:
+    """Збіг слів лірики за текстом і часом не повинен пригинати музику.
+
+    Викреслене слово голосом не вважається: на ньому кімната й так вимкнена,
+    а пригинати музику під ним означало б глушити те, що має звучати повністю.
+    """
 
     def text(word):
         return re.sub(r"[^\w]", "", word.w.lower())
@@ -233,6 +242,9 @@ def voice_spans(room: Transcript, lyrics: Transcript) -> tuple[list[tuple[float,
     kept, dropped = [], 0
     for word in room.words():
         if not text(word) or word.prob is not None and word.prob < 0.2:
+            continue
+        middle = (word.start + word.end) / 2
+        if any(start <= middle <= end for start, end in struck):
             continue
         if any(
             abs(word.start - lyric.start) <= 0.3
@@ -264,6 +276,61 @@ def duck_curve(length: int, rate: int, spans: list[tuple[float, float]]) -> np.n
         release = 0.5 + 0.5 * np.cos(np.pi * np.clip((times - release_start) / 0.6, 0, 1))
         curve[lo:hi] = np.maximum(curve[lo:hi], np.minimum(attack, release))
     return curve
+
+
+def local_spans(
+    spans: Sequence[tuple[float, float]], start: float, seconds: float
+) -> list[tuple[float, float]]:
+    """Відрізки сирого таймлайна → координати вікна пілота, обрізані по його краях."""
+    result = []
+    for lo, hi in spans:
+        lo, hi = max(lo - start, 0.0), min(hi - start, seconds)
+        if hi > lo:
+            result.append((lo, hi))
+    return result
+
+
+def strike_curve(length: int, rate: int, spans: Sequence[tuple[float, float]]) -> np.ndarray:
+    """1 усередині відрізка, косинусні рампи лише всередині: назовні нічого не тече.
+
+    Короткий відрізок стискає рампи навпіл, щоб однаково дійти до повної тиші.
+    """
+    curve = np.zeros(length, dtype=np.float64)
+    for start, end in spans:
+        ramp = min(STRIKE_RAMP, (end - start) / 2)
+        lo, hi = max(0, int(start * rate)), min(length, int(end * rate) + 1)
+        times = np.arange(lo, hi) / rate
+        edge = np.minimum(times - start, end - times) / ramp
+        shape = 0.5 - 0.5 * np.cos(np.pi * np.clip(edge, 0, 1))
+        curve[lo:hi] = np.maximum(curve[lo:hi], shape)
+    return curve.astype(np.float32)
+
+
+def gains(
+    duck: np.ndarray, covered: np.ndarray, strike: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """(room_gain, music_gain); вхідні масиви не змінюються."""
+    music_gain = 10 ** ((-12 * duck) / 20)
+    room_gain = 10 ** ((-24 * (1 - duck)) / 20)
+    # Поза покриттям треку залишається лише оригінальний запис.
+    room_gain[~covered] = 1
+    music_gain[~covered] = 0
+    # Повна музика лише там, де вона є; кімната в нуль і без покриття.
+    music_gain = music_gain + (1 - music_gain) * strike * covered
+    room_gain = room_gain * (1 - strike)
+    return room_gain, music_gain
+
+
+def uncovered_strikes(
+    covered: np.ndarray, rate: int, spans: Sequence[tuple[float, float]]
+) -> list[list[float]]:
+    """Стрічки викресленого, де трек не покриває (там тиша), злиті в інтервали."""
+    inside = np.zeros(len(covered), dtype=bool)
+    for start, end in spans:
+        inside[max(0, int(start * rate)) : max(0, int(end * rate))] = True
+    gap = np.concatenate([[False], inside & ~covered, [False]]).astype(np.int8)
+    edges = np.flatnonzero(np.diff(gap))
+    return [[round(a / rate, 3), round(b / rate, 3)] for a, b in zip(edges[::2], edges[1::2])]
 
 
 def aligned_audio(
@@ -312,6 +379,13 @@ def run_trial(
     progress=print,
 ) -> dict:
     """Сінк, незалежний ASR кімнати та лірики, WAV і необовʼязкові відеопроби."""
+    # Зламаний файл позначок зупиняє тест до важкої роботи, а не після неї.
+    struck_raw = None
+    if project.strikes.exists():
+        try:
+            struck_raw = Strikes.load(project.strikes).spans
+        except Exception as error:
+            raise ValueError(f"Не вдалося прочитати {project.strikes.name}: {error}") from error
     match, report = sync_trial(project, start=start, seconds=seconds, progress=progress)
     if sync_only:
         return report
@@ -331,7 +405,9 @@ def run_trial(
     backend = FasterWhisperBackend()
     room_text = _transcribe(output / "room.asr.wav", backend, progress)
     lyric_text = _transcribe(output / "lyrics.asr.wav", backend, progress)
-    spans, dropped = voice_spans(room_text, lyric_text)
+    # Слова ASR кімнати вже в координатах вікна, тож і викреслені — ввіконні.
+    struck = local_spans(struck_raw or [], start, seconds)
+    spans, dropped = voice_spans(room_text, lyric_text, struck)
     if not spans:
         raise ValueError("Голос не знайдено: тест дакінгу не можна вважати проведеним")
     room = load(project.source_video(), 48000, start=start, duration=seconds, channels=2)
@@ -351,11 +427,7 @@ def run_trial(
         raise ValueError("Замало ділянок без голосу для незалежного підбору гучності")
     gain = float(np.median(ratios))
     clean *= gain
-    music_gain = 10 ** ((-12 * curve) / 20)
-    room_gain = 10 ** ((-24 * (1 - curve)) / 20)
-    # Поза покриттям треку залишається лише оригінальний запис.
-    room_gain[~covered] = 1
-    music_gain[~covered] = 0
+    room_gain, music_gain = gains(curve, covered, strike_curve(n, 48000, struck))
     mixed = room * room_gain[:, None] + clean * music_gain[:, None]
     common_gain = min(
         1, 0.89 / max(float(np.max(np.abs(mixed))), float(np.max(np.abs(room))), 1e-12)
@@ -395,6 +467,11 @@ def run_trial(
             "Один трек: переходи та повний запис не перевірялися",
         ],
     )
+    if struck_raw is not None:
+        report["strikes"] = {
+            "spans": [[round(a, 3), round(b, 3)] for a, b in struck],
+            "uncovered": uncovered_strikes(covered, 48000, struck),
+        }
     report["inputs"] = {
         str(p): render.sha256(p) for p in (project.source_video(), Path(match.track))
     }

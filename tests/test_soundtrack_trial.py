@@ -11,11 +11,17 @@ from videoworks.edl import from_spans
 from videoworks.models import AudioSettings, BackendInfo, Segment, Transcript, Word
 from videoworks.render import build_filtergraph, cut
 from videoworks.soundtrack.trial import (
+    STRIKE_RAMP,
     SYNC_RATE,
     coarse_offset,
     duck_curve,
+    gains,
     load,
+    local_spans,
     refine,
+    run_trial,
+    strike_curve,
+    uncovered_strikes,
     voice_spans,
     write_wav,
 )
@@ -142,3 +148,88 @@ def test_render_uses_replacement_audio_and_hashes_both_inputs(tmp_path):
     with pytest.raises(ValueError, match="не покриває"):
         cut(source, too_long, tmp_path / "invalid.mp4", audio_override=replacement, audio_origin=10)
     assert not (tmp_path / "invalid.mp4").exists()
+
+
+def test_strike_curve_is_full_inside_and_ramps_stay_within_the_span():
+    curve = strike_curve(48000 * 3, 48000, [(1.0, 2.0)])
+    assert curve.dtype == np.float32
+    assert curve[int(0.999 * 48000)] == 0 and curve[int(2.001 * 48000)] == 0
+    assert curve[int(1.5 * 48000)] == 1
+    assert 0 < curve[int(1.02 * 48000)] < 1
+    assert curve[int(1.045 * 48000)] == pytest.approx(1, abs=1e-3)
+    assert STRIKE_RAMP == 0.04
+
+
+def test_very_short_strike_still_reaches_silence():
+    assert strike_curve(48000, 48000, [(0.5, 0.56)]).max() > 0.99
+
+
+def test_overlapping_strikes_combine_by_maximum_and_clip_to_the_signal():
+    curve = strike_curve(1000, 1000, [(0.1, 0.5), (0.3, 0.9), (0.95, 5.0)])
+    assert len(curve) == 1000 and curve[400] == 1 and curve[200] == 1
+
+
+def test_gains_without_strikes_match_the_current_mix():
+    duck = duck_curve(48000 * 4, 48000, [(1.0, 2.0)])
+    covered = np.ones(len(duck), bool)
+    room, music = gains(duck, covered, np.zeros(len(duck), np.float32))
+    np.testing.assert_array_equal(music, 10 ** ((-12 * duck) / 20))
+    np.testing.assert_array_equal(room, 10 ** ((-24 * (1 - duck)) / 20))
+
+
+def test_gains_without_strikes_keep_the_uncovered_rule_and_do_not_mutate_inputs():
+    duck = duck_curve(4000, 1000, [(1.0, 1.5)])
+    covered = np.arange(4000) < 2500
+    before = duck.copy(), covered.copy()
+    room, music = gains(duck, covered, np.zeros(4000, np.float32))
+    assert (room[~covered] == 1).all() and (music[~covered] == 0).all()
+    np.testing.assert_array_equal(duck, before[0])
+    np.testing.assert_array_equal(covered, before[1])
+
+
+def test_struck_stretch_is_clean_music_and_no_room_even_under_a_duck():
+    duck = np.ones(48000, np.float32)
+    covered = np.ones(48000, bool)
+    room, music = gains(duck, covered, np.ones(48000, np.float32))
+    assert room.max() == 0 and music.min() == pytest.approx(1)
+
+
+def test_struck_stretch_without_a_track_is_silence():
+    room, music = gains(np.zeros(100, np.float32), np.zeros(100, bool), np.ones(100, np.float32))
+    assert room.max() == 0 and music.max() == 0
+
+
+def test_local_spans_shift_and_clip_to_the_window():
+    spans = [(50, 61), (119, 130), (300, 301)]
+    assert local_spans(spans, start=60, seconds=60) == [(0.0, 1.0), (59.0, 60.0)]
+
+
+def test_struck_words_do_not_duck_the_music():
+    room = _transcript([Word(w="слово", start=10, end=10.4), Word(w="інше", start=20, end=20.4)])
+    lyrics = _transcript([])
+    spans, _ = voice_spans(room, lyrics, struck=[(9.8, 10.6)])
+    assert spans == [(20, 20.4)]
+
+
+def test_broken_strikes_file_stops_the_trial_before_sync(tmp_path, monkeypatch):
+    class Project:
+        strikes = tmp_path / "strikes.json"
+
+    Project.strikes.write_text("{не json", encoding="utf-8")
+
+    def sync_must_not_run(*args, **kwargs):
+        raise AssertionError("sync_trial не мав викликатися")
+
+    monkeypatch.setattr("videoworks.soundtrack.trial.sync_trial", sync_must_not_run)
+    with pytest.raises(ValueError, match="strikes.json"):
+        run_trial(Project())
+
+
+def test_uncovered_strikes_are_merged_window_local_intervals():
+    covered = np.ones(10000, bool)
+    covered[2000:3000] = False
+    covered[3000:3500] = False
+    covered[9000:] = False
+    got = uncovered_strikes(covered, 1000, [(1.0, 4.0), (8.0, 10.0)])
+    assert got == [[2.0, 3.5], [9.0, 10.0]]
+    assert uncovered_strikes(np.ones(100, bool), 100, [(0.0, 1.0)]) == []
