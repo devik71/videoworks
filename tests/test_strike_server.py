@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import socket
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -259,3 +260,32 @@ def test_oversized_body_does_not_poison_the_connection(server) -> None:
     assert answer.startswith(b"HTTP/1.1 200")
     assert b'"transcript"' in answer
     assert calls == []
+
+
+def test_two_tabs_saving_at_once_cannot_both_win(tmp_path) -> None:
+    """Перевірка відбитка й запис — одна дія: друга вкладка бачить уже новий файл."""
+    stamp = {"value": "v1"}
+    calls: list[list[int]] = []
+
+    def store(words, manual) -> dict:
+        calls.append(words)
+        time.sleep(0.3)  # повільний диск: друга вкладка встигає прийти посеред запису
+        stamp["value"] = f"v{len(calls) + 1}"
+        return {"struck": words, "manual": manual, "spans": [], "counts": {"words": len(words)}}
+
+    running, thread, base = start(tmp_path, store=store, stamp=lambda: stamp["value"])
+    answers: list[dict] = []
+    try:
+        tabs = [
+            threading.Thread(target=lambda w=w: answers.append(post(base, good(words=[w]))))
+            for w in (1, 2)
+        ]
+        for tab in tabs:
+            tab.start()
+        for tab in tabs:
+            tab.join(timeout=5)
+    finally:
+        stop(running, thread)
+    assert sorted(a.get("saved") for a in answers) == [False, True]
+    assert [a.get("moved") for a in answers if not a["saved"]] == [True]
+    assert len(calls) == 1

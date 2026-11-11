@@ -258,6 +258,43 @@ def test_load_with_stale_hash_rematches_without_writing(tmp_path):
     assert path.read_bytes() == before
 
 
+@pytest.mark.parametrize("sha", ["x", "old"])
+def test_load_pulls_manual_spans_past_the_end_inside_and_keeps_every_mark(tmp_path, sha):
+    """Позначка за кінцем запису інакше відхилялась би на кожному збереженні."""
+    from videoworks.strike_server import read_intent
+
+    short = transcript(("раз", 1.0, 1.3), duration=10.0006)
+    path = tmp_path / "strikes.json"
+    path.write_text(
+        Strikes(
+            source="s",
+            transcript_sha256=sha,
+            # ASR-слово, що закінчилось за кінцем медіа, і загублене нульове слово
+            # в самому кінці, яке rematch розширив на MIN_MANUAL.
+            words=[W(w="зникло", start=10.0, end=10.0)],
+            manual=[ManualSpan(start=9.5, end=10.3), ManualSpan(start=10.2, end=10.25)],
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    got, _ = load(path, transcript=short, transcript_sha="x", source="s")
+    page = state(short, got, title="t")
+    assert len(page["manual"]) == len(got.manual) == (2 if sha == "x" else 3)
+    for start, end in page["manual"]:
+        assert 0 <= start < end <= short.duration
+        assert end - start >= 0.05 - 1e-9
+    assert page["manual"][0] == [9.5, 10.0]
+
+    # Те, що сторінка отримала, сервер приймає назад, і запис лишає позначку в кінці.
+    _, manual = read_intent(
+        {"words": [], "manual": page["manual"]}, word_count=1, duration=page["duration"]
+    )
+    store(path, from_indices([], manual, transcript=short, transcript_sha="x", source="s"),
+          duration=short.duration)
+    again, _ = load(path, transcript=short, transcript_sha="x", source="s")
+    assert max(m.end for m in again.manual) == 10.0
+    assert again.spans[-1][1] == pytest.approx(10.0006, abs=1e-3)
+
+
 def test_load_tolerates_a_bom(tmp_path):
     path = tmp_path / "strikes.json"
     store(path, Strikes(source="s", transcript_sha256="x"), duration=100)

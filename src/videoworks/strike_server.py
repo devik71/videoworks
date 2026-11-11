@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import math
+import threading
 from collections.abc import Callable
 from functools import partial
 from http import HTTPStatus
@@ -155,6 +156,14 @@ class _Handler(_StudioHandler):
             )
             return
 
+        # Сервер багатопотоковий: без замка дві вкладки з тим самим відбитком
+        # обидві пройшли б перевірку, і друга мовчки затерла б першу.
+        with self.server.save_lock:
+            self._save(body, state, words, manual)
+
+    def _save(
+        self, body: dict, state: dict, words: list[int], manual: list[tuple[float, float]]
+    ) -> None:
         current = self._stamp()
         sent = body.get("stamp")
         force = body.get("force") is True
@@ -198,4 +207,7 @@ def build_server(
     `stamp` віддає відбиток файлу — за ним видно, що файл перезібрали.
     """
     handler = partial(_Handler, video=video, load=load, store=store, stamp=stamp)
-    return preview.Server(("127.0.0.1", port), handler)
+    server = preview.Server(("127.0.0.1", port), handler)
+    # Один замок на сервер, а не на обробник: обробник живе один запит.
+    server.save_lock = threading.Lock()
+    return server

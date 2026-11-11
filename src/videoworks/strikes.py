@@ -173,10 +173,42 @@ def rematch(old: Strikes, transcript: Transcript, transcript_sha: str) -> tuple[
     return carried, unglued
 
 
+def inside(manual: Sequence[ManualSpan], duration: float) -> list[ManualSpan]:
+    """Ручні відрізки в межах запису; жоден не зникає.
+
+    Відрізок за кінцем запису (ASR-слово довше за медіа, розширене нульове
+    слово в самому кінці, ручна правка файлу) сервер відхиляв би на кожному
+    збереженні, і сторінка не мала б як зберегти решту. Тому обрізаємо його
+    по запису, а коротший за MIN_MANUAL — розширюємо всередину, не викидаємо:
+    позначка людини не зникає мовчки. Межу беремо до мілісекунди вниз, щоб
+    округлене для сторінки число не вийшло за тривалість.
+    """
+    limit = max(0.0, math.floor(duration * 1000) / 1000)
+    fixed = []
+    for span in manual:
+        start, end = min(max(span.start, 0.0), limit), min(span.end, limit)
+        if end - start < MIN_MANUAL:
+            if start + MIN_MANUAL <= limit:
+                end = start + MIN_MANUAL
+            else:
+                start, end = max(0.0, limit - MIN_MANUAL), limit
+        if end <= start:
+            fixed.append(span)  # запис коротший за мілісекунду: обрізати нема куди
+        elif (start, end) == (span.start, span.end):
+            fixed.append(span)
+        else:
+            fixed.append(ManualSpan(start=round(start, 3), end=round(end, 3)))
+    return fixed
+
+
 def load(
     path: Path, *, transcript: Transcript, transcript_sha: str, source: str
 ) -> tuple[Strikes, int]:
-    """Читає strikes.json; з іншим відбитком транскрипту переносить позначки, але не пише."""
+    """Читає strikes.json; з іншим відбитком транскрипту переносить позначки, але не пише.
+
+    Ручні відрізки приводить у межі запису (див. `inside`); слова лишає як є —
+    `spans` і так обрізає їх по запису.
+    """
     path = Path(path)
     if not path.exists():
         return Strikes(source=source, transcript_sha256=transcript_sha), 0
@@ -185,9 +217,11 @@ def load(
         saved = Strikes.model_validate_json(path.read_text(encoding="utf-8-sig"))
     except (ValueError, OSError) as exc:
         raise ValueError(f"{path.name} зіпсований: {exc}") from exc
-    if saved.transcript_sha256 == transcript_sha:
-        return saved, 0
-    return rematch(saved, transcript, transcript_sha)
+    unglued = 0
+    if saved.transcript_sha256 != transcript_sha:
+        saved, unglued = rematch(saved, transcript, transcript_sha)
+    saved.manual = inside(saved.manual, transcript.duration)
+    return saved, unglued
 
 
 def indices(strikes: Strikes, transcript: Transcript) -> list[int]:
