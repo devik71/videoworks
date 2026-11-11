@@ -1,7 +1,7 @@
 // Пензель: жест вказівника над словами й фарба поверх них. Тут немає ні стану
 // сторінки, ні мережі, ні плеєра — лише «якого слова торкнулись» і «що намалювати».
 
-import { crosses, fill, gestureMode, isStroke, seed, strokePath } from "./logic.js";
+import { fill, gestureMode, isStroke, seed, strokePath, sweeps } from "./logic.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const OVERHANG = 5; // px: мазок трохи виходить за краї слова, як справжній
@@ -10,6 +10,7 @@ const GROW_MS = 160;
 const FADE_MS = 140;
 const SPLASH_MS = 300;
 const SLACK = 12; // px: запас обрізання, щоб рвані краї не зрізало рамкою
+const PATH_LIMIT = 512; // точок шляху між двома словами: далі це вже блукання полями
 
 const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -68,6 +69,9 @@ export function attach(root, handlers) {
       at: event.timeStamp,
       px: event.clientX,
       py: event.clientY,
+      // Шлях вказівника від останнього взятого слова: за ним видно, над якими
+      // словами пройшла рука, навіть коли подія влучила між словами.
+      path: [[event.clientX, event.clientY]],
     };
     // Вказівник може вийти за аркуш — жест від цього не повинен обірватись, і його
     // кінець мусить дійти сюди, де б кнопку не відпустили. Тому захоплюємо завжди,
@@ -85,8 +89,13 @@ export function attach(root, handlers) {
       return;
     }
     const index = handlers.wordAt(event.clientX, event.clientY);
-    const fromX = g.px;
-    const fromY = g.py;
+    // Браузер зливає кілька рухів миші в одну подію на кадр, але самі точки віддає:
+    // із ними різкий рух описано густіше. Без них шлях просто рідший.
+    const merged = typeof event.getCoalescedEvents === "function"
+      ? event.getCoalescedEvents() : [];
+    for (const part of merged) g.path.push([part.clientX, part.clientY]);
+    g.path.push([event.clientX, event.clientY]);
+    if (g.path.length > PATH_LIMIT) g.path.splice(0, g.path.length - PATH_LIMIT);
     const elapsed = Math.max(event.timeStamp - g.at, 1);
     const speed = Math.hypot(event.clientX - g.px, event.clientY - g.py) / elapsed;
     g.at = event.timeStamp;
@@ -118,13 +127,13 @@ export function attach(root, handlers) {
     }
     if (index !== null && index !== g.last) {
       // Між попереднім словом і цим добираємо лише ті, над якими пройшов шлях
-      // вказівника від минулої події до цієї (правило — у logic.js біля fill).
-      const crossed = (i) => crosses(
-        fromX, fromY, event.clientX, event.clientY, handlers.rectOf ? handlers.rectOf(i) : null,
-      );
+      // вказівника відтоді (правило — у logic.js біля fill).
+      const crossed = (i) => sweeps(g.path, handlers.rectOf ? handlers.rectOf(i) : null);
       for (const i of fill(g.last, index, blank, crossed)) take(i);
       g.last = index;
     } else if (index !== null) take(index); // рука рухається по слову — воно під пензлем
+    // Слово взято — шлях до наступного починається звідси.
+    if (index !== null) g.path = [[event.clientX, event.clientY]];
     if (g.mode === "erase" && index === null) wipe(blotAt(event.clientX, event.clientY));
     if (changed) handlers.onPreview(g.touched, g.mode, g.blots);
   });
@@ -162,7 +171,11 @@ export function attach(root, handlers) {
   // вже не шлях руки. Беремо за попереднє те, що під вказівником зараз, нічого не
   // добираючи; далі жест іде звідси.
   const reanchor = () => {
-    if (gesture && gesture.touched) gesture.last = handlers.wordAt(gesture.px, gesture.py);
+    const g = gesture;
+    if (!g) return;
+    // Старий шлях лежав на аркуші, якого під вказівником уже немає.
+    g.path = [[g.px, g.py]];
+    if (g.touched) g.last = handlers.wordAt(g.px, g.py);
   };
   window.addEventListener("scroll", reanchor, true);
   window.addEventListener("resize", reanchor);

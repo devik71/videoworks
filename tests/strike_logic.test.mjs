@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   gestureMode, fill, applyGesture, isStroke, runs, seed, strokePath, isMuted, nextEdge,
   phraseAt, manualFromHold, nudge, removeManualAt, reviewStops, History, Outbox,
-  squeakPitch, plural, crosses, FILL_LIMIT,
+  squeakPitch, plural, crosses, sweeps, FILL_LIMIT,
 } from "../src/videoworks/web/strike/logic.js";
 
 const S1 = { struck: [1, 2], manual: [] };
@@ -386,4 +386,49 @@ test("fill із шляхом: стрибок, довший за правдопо
   assert.deepEqual(fill(0, FILL_LIMIT + 1, new Set(), all), [FILL_LIMIT + 1]);
   assert.equal(asked, 0); // навіть не питали геометрію: сотні замірів на подію ні до чого
   assert.equal(fill(0, FILL_LIMIT, new Set(), all).length, FILL_LIMIT);
+});
+
+// Шість слів у рядок: крок 50 px, ширина 40 px, між словами проміжок 10 px.
+const rowRect = (i) => ({ left: i * 50, right: i * 50 + 40, top: 0, bottom: 30 });
+
+test("sweeps: шлях із кількох відрізків зачіпає слово, якщо його зачепив хоч один", () => {
+  const rect = { left: 100, right: 140, top: 0, bottom: 30 };
+  assert.equal(sweeps([[0, 15], [60, 15], [200, 15]], rect), true);
+  assert.equal(sweeps([[0, 15], [60, 15]], rect), false);
+  assert.equal(sweeps([[120, 15]], rect), true); // шлях з однієї точки — це точка
+  assert.equal(sweeps([[10, 15]], rect), false);
+  assert.equal(sweeps([], rect), false);
+  assert.equal(sweeps([[0, 15], [200, 15]], null), false);
+});
+
+test("fill зі шляхом: подія в проміжку між словами не губить слів перед собою", () => {
+  // Рука йде зі слова 0 вправо. Перша подія влучила в проміжок між словами 3 і 4
+  // (x = 195): слова під нею немає, нічого не взято. Друга — вже на слові 5.
+  // Шлях від останнього взятого слова: 20 → 195 → 270; слова 1–3 лежать на першому
+  // відрізку, 4 — на другому. Жодне не має випасти.
+  const path = [[20, 15], [195, 15], [270, 15]];
+  const took = fill(0, 5, new Set(), (i) => sweeps(path, rowRect(i)));
+  assert.deepEqual(took, [1, 2, 3, 4, 5]);
+  // Якби шлях починався з попередньої події (у проміжку), слова 1–3 зникли б:
+  const fromGap = fill(0, 5, new Set(), (i) => sweeps([[195, 15], [270, 15]], rowRect(i)));
+  assert.deepEqual(fromGap, [4, 5]);
+});
+
+test("fill зі шляхом: крива з кількох відрізків бере все, над чим пройшла", () => {
+  // Хвиляста лінія вздовж рядка: трохи вище над словом 2, трохи нижче на слові 4.
+  const path = [[20, 15], [70, 20], [120, -10], [170, 12], [220, 25], [270, 15]];
+  const took = fill(0, 5, new Set(), (i) => sweeps(path, rowRect(i)));
+  assert.deepEqual(took, [1, 2, 3, 4, 5]);
+  // Та сама дуга, піднята вище над словами 2 і 3, їх чесно минає.
+  const high = [[20, 15], [70, 20], [95, -60], [195, -60], [220, 25], [270, 15]];
+  assert.deepEqual(fill(0, 5, new Set(), (i) => sweeps(high, rowRect(i))), [1, 4, 5]);
+});
+
+test("fill зі шляхом: точка на полі між двома рядками не добирає зайвого", () => {
+  // Зі слова 1 першого рядка вправо за край тексту (поле, x = 260), звідти на слово 8
+  // другого рядка. На шляху: слова 2, 3, 4 першого рядка; у другому рядку шлях
+  // іде справа й до слова 8 доходить через слово 9, а слів 5, 6, 7 не торкається.
+  const path = [[70, 15], [260, 40], [170, 65]];
+  const took = fill(1, 8, new Set(), (i) => sweeps(path, wordRect(i)));
+  assert.deepEqual(took, [2, 3, 4, 8]);
 });
