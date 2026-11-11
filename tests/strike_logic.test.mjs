@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   gestureMode, fill, applyGesture, isStroke, runs, seed, strokePath, isMuted, nextEdge,
   phraseAt, manualFromHold, nudge, removeManualAt, reviewStops, History, Outbox,
-  squeakPitch, plural, crosses, sweeps, FILL_LIMIT,
+  squeakPitch, plural, seconds, crosses, sweeps, FILL_LIMIT,
 } from "../src/videoworks/web/strike/logic.js";
 
 const S1 = { struck: [1, 2], manual: [] };
@@ -431,4 +431,12 @@ test("fill зі шляхом: точка на полі між двома ряд�
   const path = [[70, 15], [260, 40], [170, 65]];
   const took = fill(1, 8, new Set(), (i) => sweeps(path, wordRect(i)));
   assert.deepEqual(took, [2, 3, 4, 8]);
+});
+
+test("seconds округлює ціле, а потім ділить на хвилини: «60 с» не буває", () => {
+  assert.equal(seconds(3.25), "3.3 с");
+  assert.equal(seconds(42.4), "42 с");
+  assert.equal(seconds(59.6), "1 хв 0 с");
+  assert.equal(seconds(119.6), "2 хв 0 с");
+  assert.equal(seconds(125.2), "2 хв 5 с");
 });

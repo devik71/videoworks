@@ -124,6 +124,8 @@ export function createPlayer(video, { spans, onTick, onChange }) {
     seek(t, to = null) {
       stopAt = to;
       video.currentTime = Math.max(0, t);
+      // Як і play: стрибок у викреслене глушимо одразу, а не з наступного кадру.
+      snap(Math.max(0, t));
     },
     get time() {
       return video.currentTime;

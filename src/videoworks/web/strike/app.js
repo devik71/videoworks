@@ -4,7 +4,7 @@
 // відрізки й лічильники сторінка тільки показує.
 
 import {
-  applyGesture, phraseAt, plural, removeManualAt, History, Outbox, CONTEXT,
+  applyGesture, phraseAt, plural, removeManualAt, seconds, History, Outbox, CONTEXT,
 } from "./logic.js";
 import { attach } from "./brush.js";
 import { createPlayer } from "./player.js";
@@ -62,12 +62,6 @@ let videoBroken = false;
 if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
 
 // ---- дрібниці ----
-
-function seconds(v) {
-  if (v < 10) return `${v.toFixed(1)} с`;
-  if (v < 60) return `${Math.round(v)} с`;
-  return `${Math.floor(v / 60)} хв ${Math.round(v % 60)} с`;
-}
 
 function snapshot() {
   return {

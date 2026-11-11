@@ -287,6 +287,15 @@ export function plural(n, forms) {
   return forms[2];
 }
 
+// Тривалість для людини. Спершу округлюємо все число, потім ділимо на хвилини:
+// інакше 119.6 с дає «1 хв 60 с», а 59.6 — «60 с».
+export function seconds(v) {
+  if (v < 10) return `${v.toFixed(1)} с`;
+  const whole = Math.round(v);
+  if (whole < 60) return `${whole} с`;
+  return `${Math.floor(whole / 60)} хв ${whole % 60} с`;
+}
+
 // ---- історія й черга відправки ----
 
 // Знімки порівнюємо за значенням: однаковий вміст — однаковий ключ.

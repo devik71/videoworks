@@ -151,3 +151,12 @@ def test_sound_shares_the_players_audio_context():
     made = [name for name in SCRIPTS if "AudioContext(" in (WEB / name).read_text("utf-8")]
     assert made in ([], ["player.js"]), made
     assert "new Context()" in (WEB / "player.js").read_text("utf-8")
+
+
+def test_seek_snaps_the_mute_like_play_does():
+    # Без snap перемотування мапою в середину викресленого лишає ~30 мс слова чутними:
+    # глушіння вмикається лише на наступному кадрі.
+    source = (WEB / "player.js").read_text("utf-8")
+    body = source[source.index("seek(t"):]
+    body = body[: body.index("\n    },")]
+    assert "snap(Math.max(0, t))" in body
